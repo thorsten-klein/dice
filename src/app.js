@@ -354,12 +354,14 @@ function buildConfigScreenHtml() {
     '<div class="header">' +
       buildDiceLogoSvg() +
       '<h1 class="screen-title">Dice Configuration</h1>' +
-      '<button class="icon-btn configurations-btn" id="toggle-configurations" title="Saved Configurations">' +
-        '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' +
-          '<path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>' +
-        '</svg>' +
-        'Saved Configurations' +
-      '</button>' +
+      '<div class="header-actions">' +
+        '<button class="icon-btn configurations-btn" id="toggle-configurations" title="Saved Configurations">' +
+          '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' +
+            '<path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>' +
+          '</svg>' +
+          'Saved Configurations' +
+        '</button>' +
+      '</div>' +
     '</div>' +
     buildConfigFormHtml() +
   '</div>';
@@ -542,7 +544,7 @@ function buildGameSettingsHtml(state, pfx) {
   var cr = state.confirmRestartWhenMystery !== false;
   var ul = state.allowUnlockAfterRoll !== false;
   var rl = !!state.requireLockBeforeRoll;
-  return buildGameSettingRow(pfx, 'block-val',     'Block re-throw for some time', b,  'Block rolling for N seconds after each roll (0 = Off)', 's') +
+  return buildGameSettingRow(pfx, 'block-val',     'Block re-roll for some time', b,  'Block rolling for N seconds after each roll (0 = Off)', 's') +
          buildGameSettingRow(pfx, 'mystery-val',   'Auto Mystery after rolls', m,  'Automatically enable mystery mode after N rolls (0 = Off)', true) +
          buildGameSettingRow(pfx, 'limit-rolls-val', 'Limit number of rolls', mx, 'Specify a maximum number of rolls per round (0 = Off)', null, 'Off') +
          buildGameSettingToggle(pfx, 'confirm-restart', 'Confirm restart in case of unrevealed dice', cr, 'Ask before restarting when mystery dice are active') +
@@ -1198,6 +1200,15 @@ function updateDiceConfig(index, newConfig) {
 var rollingState = null;
 var _blockTimer = null;
 
+function leaveRollingScreen() {
+  clearInterval(_blockTimer);
+  syncGameSettingsFromRolling();
+  rollingState = null;
+  if (document.fullscreenElement) document.exitFullscreen && document.exitFullscreen();
+  history.replaceState({ screen: 'config' }, '');
+  renderConfigScreen();
+}
+
 function syncGameSettingsFromRolling() {
   configState.blockReThrowSeconds = rollingState.blockReThrowSeconds;
   configState.autoMysteryAfterRolls = rollingState.autoMysteryAfterRolls;
@@ -1233,11 +1244,23 @@ function initRollingScreen(params) {
     swipeToRoll: (loadViewSettings().swipeToRoll) !== undefined ? loadViewSettings().swipeToRoll : (navigator.maxTouchPoints > 0),
     showSettings: false,
     showInfo: false,
+    showHistory: false,
     showRestartConfirm: false,
+    showBackConfirm: false,
+    rollHistory: [],
     remainingBlockSeconds: 0,
   };
   clearInterval(_blockTimer);
   _longPressTimers = {};
+  // Record the initial roll as the first history entry
+  rollingState.rollHistory.push({
+    round: rollingState.roundNumber,
+    roll: rollingState.rollCount,
+    diceValues: rollingState.diceValues.slice(),
+    lockedDice: rollingState.lockedDice.slice(),
+    individualMysteryDice: rollingState.individualMysteryDice.slice(),
+    isHidden: rollingState.isHidden,
+  });
   history.pushState({ screen: 'rolling' }, '');
   renderRollingScreen();
 }
@@ -1315,6 +1338,8 @@ function buildRollingScreenHtml() {
     buildRollingSettingsDialog() +
     buildRestartConfirmModal() +
     buildRollingInfoModal(s) +
+    buildRollingHistoryModal() +
+    buildBackConfirmModal() +
     '<div class="header">' +
       '<button class="icon-btn" id="back-btn">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>' +
@@ -1324,22 +1349,29 @@ function buildRollingScreenHtml() {
         '<h1 class="screen-title">Roll the Dice</h1>' +
         (s.description ? '<div class="screen-subtitle">' + htmlEscape(s.description) + '</div>' : '') +
       '</div>' +
-      '<button class="icon-btn" id="rolling-info-btn" title="Help">' +
-        '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' +
-          '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>' +
-        '</svg>' +
-      '</button>' +
-      '<button class="icon-btn" id="fullscreen-btn" title="Fullscreen">' +
-        (document.fullscreenElement
-          ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>'
-          : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>') +
-      '</button>' +
-      '<button class="icon-btn" id="rolling-settings-btn">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-          '<circle cx="12" cy="12" r="3"/>' +
-          '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>' +
-        '</svg>' +
-      '</button>' +
+      '<div class="header-actions">' +
+        '<button class="icon-btn" id="rolling-history-btn" title="Roll History">' +
+          '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' +
+            '<path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>' +
+          '</svg>' +
+        '</button>' +
+        '<button class="icon-btn" id="rolling-info-btn" title="Help">' +
+          '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' +
+            '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>' +
+          '</svg>' +
+        '</button>' +
+        '<button class="icon-btn" id="fullscreen-btn" title="Fullscreen">' +
+          (document.fullscreenElement
+            ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>'
+            : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>') +
+        '</button>' +
+        '<button class="icon-btn" id="rolling-settings-btn">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<circle cx="12" cy="12" r="3"/>' +
+            '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>' +
+          '</svg>' +
+        '</button>' +
+      '</div>' +
     '</div>' +
 
     '<div class="mystery-row">' +
@@ -1453,6 +1485,93 @@ function buildDiceFace(cfg, value, isLocked, fgColor) {
   }
 }
 
+function buildHistoryDieChip(cfg, value, isLocked, isMystery, diceSize) {
+  var size = Math.round(60 * diceSize);
+  var side = cfg.sideData && cfg.sideData[value];
+  var shape = (side && side.shape) || 'DEFAULT';
+  var bgColor = (side && side.color) || '#FFFFFF';
+  var fgColor = contrastColor(bgColor);
+  var clip = getShapeClip(shape);
+  var shapeStyle = 'background:' + bgColor + ';width:' + size + 'px;height:' + size + 'px;display:flex;align-items:center;justify-content:center;flex-shrink:0;' +
+    (clip ? 'clip-path:' + clip + ';border-radius:0;' : 'border-radius:12%;');
+  if (isMystery) {
+    var mysteryStyle = 'width:' + size + 'px;height:' + size + 'px;display:flex;align-items:center;justify-content:center;flex-shrink:0;border-radius:12%;background:rgba(255,255,255,0.08);';
+    return '<div style="position:relative;display:inline-block;">' +
+      '<div style="' + mysteryStyle + '"><span style="font-size:' + Math.round(size * 0.55) + 'px;font-weight:900;color:var(--purple);line-height:1;">?</span></div>' +
+      (isLocked ? '<div style="position:absolute;bottom:1px;right:1px;font-size:' + Math.round(size * 0.3) + 'px;line-height:1;">🔒</div>' : '') +
+    '</div>';
+  }
+  var inner = buildDiceFace(cfg, value, isLocked, fgColor);
+  return '<div style="position:relative;display:inline-block;">' +
+    '<div style="' + shapeStyle + '">' + inner + '</div>' +
+    (isLocked ? '<div style="position:absolute;bottom:1px;right:1px;font-size:' + Math.round(size * 0.3) + 'px;line-height:1;">🔒</div>' : '') +
+  '</div>';
+}
+
+function buildRollingHistoryModal() {
+  if (!rollingState.showHistory) return '';
+  var s = rollingState;
+  var hs = s.rollHistory;
+  var rows = hs.map(function(entry, idx) {
+      var isFirstRollOfRound = idx === 0 || hs[idx - 1].round !== entry.round;
+      var diceChips = entry.diceValues.map(function(val, i) {
+        var isMystery = entry.isHidden || entry.individualMysteryDice[i];
+        return buildHistoryDieChip(s.diceConfigs[i], val, entry.lockedDice[i], isMystery, s.diceSize);
+      }).join('');
+      return '<tr class="history-row' + (isFirstRollOfRound ? ' history-round-start' : '') + '">' +
+        '<td class="history-cell history-cell-num">' + entry.round + '</td>' +
+        '<td class="history-cell history-cell-num">' + entry.roll + '</td>' +
+        '<td class="history-cell"><div class="history-dice-row">' + diceChips + '</div></td>' +
+      '</tr>';
+  }).join('');
+  var body = '<div class="history-scroll"><table class="history-table">' +
+    '<thead><tr>' +
+      '<th class="history-cell history-cell-num">Round</th>' +
+      '<th class="history-cell history-cell-num">Roll</th>' +
+      '<th class="history-cell" style="text-align:center">Dice</th>' +
+    '</tr></thead>' +
+    '<tbody>' + rows + '</tbody>' +
+  '</table></div>';
+  return '<div class="modal-overlay" id="rolling-history-overlay">' +
+    '<div class="modal" style="max-width:500px">' +
+      '<div class="modal-header-row">' +
+        '<h2 class="modal-title">Roll History</h2>' +
+        '<div class="modal-header-actions">' +
+          '<button class="icon-btn" id="export-history-btn" title="Export as JSON">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+              '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>' +
+              '<polyline points="7 10 12 15 17 10"/>' +
+              '<line x1="12" y1="15" x2="12" y2="3"/>' +
+            '</svg>' +
+          '</button>' +
+          '<button class="icon-btn" id="close-rolling-history-btn">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' +
+          '</svg>' +
+        '</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="modal-body" style="padding:0;">' + body + '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function buildBackConfirmModal() {
+  if (!rollingState.showBackConfirm) return '';
+  return '<div class="modal-overlay" id="back-confirm-overlay">' +
+    '<div class="modal" style="max-width:300px;text-align:center;">' +
+      '<div class="modal-body">' +
+        '<h2 class="modal-title">Leave Game?</h2>' +
+        '<p style="color:var(--text-w70);font-size:14px;margin:12px 0 20px;">Your roll history will be lost.</p>' +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-purple" id="back-confirm-cancel">Stay</button>' +
+          '<button class="btn btn-orange" id="back-confirm-ok">Leave</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
 function buildRestartConfirmModal() {
   if (!rollingState.showRestartConfirm) return '';
   return '<div class="modal-overlay" id="restart-confirm-overlay">' +
@@ -1491,12 +1610,21 @@ function buildRollingInfoModal() {
     {
       title: 'Game Settings',
       body: '<ul class="info-ul">' +
-            '<li>⏳ <b>Block re-throw</b> — disables rolling for N seconds after each roll (anti-cheat).</li>' +
+            '<li>⏳ <b>Block re-roll</b> — disables rolling for N seconds after each roll (anti-cheat).</li>' +
             '<li>❓ <b>Auto Mystery</b> — automatically hides unlocked dice after N rolls.</li>' +
             '<li>🚫 <b>Limit rolls</b> — Maximum number of rolls per round. Roll is disabled once reached.</li>' +
             '<li>✅ <b>Confirm restart in case of unrevealed dice</b> — asks for confirmation before restarting when mystery dice are active.</li>' +
             '<li>🔓 <b>Allow unlocking after re-roll</b> — when off, a die cannot be unlocked once it has been rolled while locked.</li>' +
             '<li>🔒 <b>Require locking a dice before re-roll</b> — when on, at least one die must be locked before rolling again.</li>' +
+            '</ul>'
+    },
+    {
+      title: 'Roll History',
+      body: '<ul class="info-ul">' +
+            '<li>Tap the <b>history icon</b> to view a table of all rolls across all rounds.</li>' +
+            '<li>Each row shows the round, roll number, and the exact state of every die — including locks and mystery.</li>' +
+            '<li>History is preserved across restarts and accumulates for the full session.</li>' +
+            '<li>Use the <b>export button</b> in the history modal to download the history as JSON.</li>' +
             '</ul>'
     }
   ];
@@ -1640,7 +1768,8 @@ function attachSwipeToRoll() {
     var absDy = Math.abs(dy);
     if (!rollingState.swipeToRoll) return;
     if (absDx > 60 && absDx > absDy) {
-      rollDice();
+      var btn = document.getElementById('roll-btn');
+      if (btn && !btn.disabled) rollDice();
     }
   }, { passive: true });
 }
@@ -1650,13 +1779,67 @@ function attachRollingEvents() {
   function qsa(sel) { return document.querySelectorAll(sel); }
 
   el('back-btn') && el('back-btn').addEventListener('click', function() {
-    clearInterval(_blockTimer);
-    syncGameSettingsFromRolling();
-    rollingState = null;
-    if (document.fullscreenElement) document.exitFullscreen && document.exitFullscreen();
-    history.replaceState({ screen: 'config' }, '');
-    renderConfigScreen();
+    // Always show confirm — history always has the initial entry
+    rollingState.showBackConfirm = true;
+    renderRollingScreen();
   });
+  el('back-confirm-ok') && el('back-confirm-ok').addEventListener('click', function() {
+    rollingState.showBackConfirm = false;
+    doLeaveRolling();
+  });
+  el('back-confirm-cancel') && el('back-confirm-cancel').addEventListener('click', function() {
+    rollingState.showBackConfirm = false;
+    renderRollingScreen();
+  });
+  el('back-confirm-overlay') && el('back-confirm-overlay').addEventListener('click', function(e) {
+    if (e.target === el('back-confirm-overlay')) { rollingState.showBackConfirm = false; renderRollingScreen(); }
+  });
+
+  el('rolling-history-btn') && el('rolling-history-btn').addEventListener('click', function() {
+    rollingState.showHistory = true;
+    renderRollingScreen();
+  });
+  el('export-history-btn') && el('export-history-btn').addEventListener('click', function() {
+    var s = rollingState;
+    var data = {
+      configuration: s.description,
+      diceSize: s.diceSize,
+      rolls: s.rollHistory.map(function(entry) {
+        return {
+          round: entry.round,
+          roll: entry.roll,
+          dice: entry.diceValues.map(function(val, i) {
+            var cfg = s.diceConfigs[i];
+            var side = cfg.sideData && cfg.sideData[val];
+            return {
+              index: i + 1,
+              value: side ? side.value : null,
+              type: side ? side.type : null,
+              locked: entry.lockedDice[i],
+              mystery: entry.isHidden || entry.individualMysteryDice[i],
+            };
+          }),
+        };
+      }),
+    };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = (s.description || 'game') + '-history.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+  el('close-rolling-history-btn') && el('close-rolling-history-btn').addEventListener('click', function() {
+    rollingState.showHistory = false;
+    renderRollingScreen();
+  });
+  el('rolling-history-overlay') && el('rolling-history-overlay').addEventListener('click', function(e) {
+    if (e.target === el('rolling-history-overlay')) { rollingState.showHistory = false; renderRollingScreen(); }
+  });
+
+  // Shared leave function used by back-btn and popstate
+  function doLeaveRolling() { leaveRollingScreen(); }
   el('mystery-btn') && el('mystery-btn').addEventListener('click', function() {
     var s = rollingState;
     // Check if any unlocked die is currently visible (not in mystery)
@@ -1886,6 +2069,15 @@ function rollDice() {
     });
     updateDiceGridOnly();
     var s = rollingState;
+    // Record snapshot after animation — this is exactly what the user sees
+    s.rollHistory.push({
+      round: s.roundNumber,
+      roll: s.rollCount,
+      diceValues: s.diceValues.slice(),
+      lockedDice: s.lockedDice.slice(),
+      individualMysteryDice: s.individualMysteryDice.slice(),
+      isHidden: s.isHidden,
+    });
     var maxed = s.maxRolls > 0 && s.rollCount >= s.maxRolls;
     var blocked = s.remainingBlockSeconds > 0;
     var rollBtn = document.getElementById('roll-btn');
@@ -2183,7 +2375,9 @@ window.addEventListener('popstate', function(e) {
     if (rollingState) {
       rollingState.showSettings = false;
       rollingState.showInfo = false;
+      rollingState.showHistory = false;
       rollingState.showRestartConfirm = false;
+      rollingState.showBackConfirm = false;
       renderRollingScreen();
     }
     return;
@@ -2191,24 +2385,21 @@ window.addEventListener('popstate', function(e) {
   // state.screen === 'config' or unknown
   if (rollingState) {
     // Close rolling modals before leaving, if any were open
-    if (rollingState.showSettings || rollingState.showInfo || rollingState.showRestartConfirm) {
+    if (rollingState.showSettings || rollingState.showInfo || rollingState.showRestartConfirm || rollingState.showHistory || rollingState.showBackConfirm) {
       rollingState.showSettings = false;
       rollingState.showInfo = false;
+      rollingState.showHistory = false;
       rollingState.showRestartConfirm = false;
+      rollingState.showBackConfirm = false;
       history.pushState({ screen: 'rolling' }, '');
       renderRollingScreen();
       return;
     }
-    // Navigate back to config — sync game settings changed during the game
-    configState.blockReThrowSeconds = rollingState.blockReThrowSeconds;
-    configState.autoMysteryAfterRolls = rollingState.autoMysteryAfterRolls;
-    configState.maxRolls = rollingState.maxRolls;
-    configState.confirmRestartWhenMystery = rollingState.confirmRestartWhenMystery !== false;
-    configState.allowUnlockAfterRoll = rollingState.allowUnlockAfterRoll !== false;
-    saveGameSettings(configState);
-    clearInterval(_blockTimer);
-    rollingState = null;
-    if (document.fullscreenElement) document.exitFullscreen && document.exitFullscreen();
+    // Navigate back to config — always show confirm (history always has the initial entry)
+    rollingState.showBackConfirm = true;
+    history.pushState({ screen: 'rolling' }, '');
+    renderRollingScreen();
+    return;
   }
   if (configState &&
       (configState.showConfigurations ||

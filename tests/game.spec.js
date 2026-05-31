@@ -44,6 +44,9 @@ test('round number resets to 1 when re-entering game screen', async ({ page, bas
   await page.waitForTimeout(600);
   await expect(page.locator('.round-count')).toHaveText('Round: 2');
   await page.click('#back-btn');
+  // Confirm the leave modal (history exists)
+  await page.waitForSelector('#back-confirm-ok');
+  await page.click('#back-confirm-ok');
   await page.waitForSelector('.config-screen');
   await page.click('#start-btn');
   await page.waitForSelector('.rolling-screen');
@@ -385,6 +388,8 @@ test('leaving the rolling screen triggers exitFullscreen', async ({ page, baseUR
     Object.defineProperty(document, 'fullscreenElement', { get: () => document.documentElement, configurable: true });
   });
   await page.click('#back-btn');
+  await page.waitForSelector('#back-confirm-ok');
+  await page.click('#back-confirm-ok');
   await page.waitForSelector('.config-screen');
   expect(await page.evaluate(() => !!window._exitFullscreenCalled)).toBe(true);
 });
@@ -397,8 +402,10 @@ test('game settings changed during play are synced back to config screen', async
   await page.locator('[data-setting-incr="r-block-val"]').click();
   await page.locator('[data-setting-incr="r-block-val"]').click();
   await page.click('#close-rolling-settings');
-  // Go back to config screen
+  // Go back to config screen (confirm the leave modal)
   await page.click('#back-btn');
+  await page.waitForSelector('#back-confirm-ok');
+  await page.click('#back-confirm-ok');
   await page.waitForSelector('.config-screen');
   // The config screen should reflect the change
   expect(await page.locator('#block-val').inputValue()).toBe('2s');
@@ -406,11 +413,81 @@ test('game settings changed during play are synced back to config screen', async
 
 // ── Navigation ─────────────────────────────────────────────────────────────────
 
-test('back button returns to the config screen', async ({ page, baseURL }) => {
+test('back button shows leave confirm modal (history always present)', async ({ page, baseURL }) => {
   await gotoRolling(page, baseURL);
   await page.click('#back-btn');
+  await page.waitForSelector('#back-confirm-overlay');
+  await expect(page.locator('#back-confirm-overlay')).toBeVisible();
+});
+
+test('back button confirm leave returns to the config screen', async ({ page, baseURL }) => {
+  await gotoRolling(page, baseURL);
+  await page.click('#back-btn');
+  await page.waitForSelector('#back-confirm-ok');
+  await page.click('#back-confirm-ok');
   await page.waitForSelector('.config-screen');
   await expect(page.locator('.config-screen')).toBeVisible();
+});
+
+test('back button confirm cancel stays on rolling screen', async ({ page, baseURL }) => {
+  await gotoRolling(page, baseURL);
+  await page.click('#back-btn');
+  await page.waitForSelector('#back-confirm-cancel');
+  await page.click('#back-confirm-cancel');
+  await expect(page.locator('.rolling-screen')).toBeVisible();
+});
+
+test('history modal opens and contains the initial roll', async ({ page, baseURL }) => {
+  await gotoRolling(page, baseURL);
+  await page.click('#rolling-history-btn');
+  await page.waitForSelector('#rolling-history-overlay');
+  await expect(page.locator('#rolling-history-overlay')).toBeVisible();
+  // Initial entry is always present
+  const rows = await page.locator('.history-row').count();
+  expect(rows).toBeGreaterThan(0);
+});
+
+test('history modal closes via X button', async ({ page, baseURL }) => {
+  await gotoRolling(page, baseURL);
+  await page.click('#rolling-history-btn');
+  await page.waitForSelector('#rolling-history-overlay');
+  await page.click('#close-rolling-history-btn');
+  await expect(page.locator('#rolling-history-overlay')).toBeHidden();
+});
+
+test('history grows after each roll', async ({ page, baseURL }) => {
+  await gotoRolling(page, baseURL);
+  await page.click('#rolling-history-btn');
+  const before = await page.locator('.history-row').count();
+  await page.click('#close-rolling-history-btn');
+  await page.click('#roll-btn');
+  await page.waitForTimeout(600);
+  await page.click('#rolling-history-btn');
+  const after = await page.locator('.history-row').count();
+  expect(after).toBe(before + 1);
+});
+
+test('history export button triggers download without error', async ({ page, baseURL }) => {
+  await gotoRolling(page, baseURL);
+  await page.click('#rolling-history-btn');
+  await page.waitForSelector('#export-history-btn');
+  let error = null;
+  page.on('pageerror', e => { error = e; });
+  await page.click('#export-history-btn');
+  expect(error).toBeNull();
+});
+
+test('history shows mystery die as question mark chip', async ({ page, baseURL }) => {
+  await gotoRolling(page, baseURL);
+  // Activate mystery on the die then roll so it's recorded
+  await page.click('#mystery-btn');
+  await page.click('#roll-btn');
+  await page.waitForTimeout(600);
+  await page.click('#rolling-history-btn');
+  await page.waitForSelector('#rolling-history-overlay');
+  // The mystery chip should contain a ? character
+  const historyText = await page.locator('.history-dice-row').last().textContent();
+  expect(historyText).toContain('?');
 });
 
 test('popstate to rolling while modals are open closes them', async ({ page, baseURL }) => {
@@ -448,7 +525,7 @@ test('popstate back with a rolling modal open intercepts navigation', async ({ p
   expect(await page.evaluate(() => rollingState.showSettings)).toBe(false);
 });
 
-test('popstate back with no modal navigates to config and clears rollingState', async ({ page, baseURL }) => {
+test('popstate back shows confirm modal, then leave clears rollingState', async ({ page, baseURL }) => {
   await gotoRolling(page, baseURL);
   await page.evaluate(() => {
     document.exitFullscreen = () => Promise.resolve();
@@ -458,6 +535,9 @@ test('popstate back with no modal navigates to config and clears rollingState', 
     rollingState.showRestartConfirm = false;
     window.dispatchEvent(new PopStateEvent('popstate', { state: { screen: 'config' } }));
   });
+  // Shows confirm modal
+  await page.waitForSelector('#back-confirm-ok');
+  await page.click('#back-confirm-ok');
   await page.waitForSelector('.config-screen');
   expect(await page.evaluate(() => rollingState)).toBeNull();
 });

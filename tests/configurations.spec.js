@@ -306,6 +306,8 @@ test('returning from the game screen preserves config form state', async ({ page
   await page.click('#start-btn');
   await page.waitForSelector('.rolling-screen');
   await page.click('#back-btn');
+  await page.waitForSelector('#back-confirm-ok');
+  await page.click('#back-confirm-ok');
   await page.waitForSelector('.config-screen');
   await expect(page.locator('#config-name')).toHaveValue('Preserved Name');
 });

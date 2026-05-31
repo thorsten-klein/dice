@@ -72,6 +72,8 @@ test('dice size is persisted to localStorage and restored after navigation', asy
   await page.click('#size-plus');
   await page.click('#close-rolling-settings');
   await page.click('#back-btn');
+  await page.waitForSelector('#back-confirm-ok');
+  await page.click('#back-confirm-ok');
   await page.waitForSelector('.config-screen');
   await page.click('#start-btn');
   await page.waitForSelector('.rolling-screen');
