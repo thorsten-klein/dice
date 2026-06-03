@@ -17,7 +17,10 @@ export const test = base.extend({
     const coverage = await page.coverage.stopJSCoverage();
     for (const entry of coverage) {
       if (!entry.url.includes('app.js')) continue;
-      const filePath = fileURLToPath(entry.url);
+      const absPath = fileURLToPath(entry.url);
+      // Use a repo-relative path so the resulting lcov.info is portable —
+      // Codecov needs paths it can match against files in the repo.
+      const filePath = path.relative(process.cwd(), absPath);
       const converter = v8ToIstanbul(filePath, 0, { source: entry.source });
       await converter.load();
       converter.applyCoverage(entry.functions);
