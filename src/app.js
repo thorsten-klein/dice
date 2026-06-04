@@ -123,6 +123,7 @@ function contrastColor(hex) {
 
 var STORAGE_KEY = 'dice_configurations';
 var LAST_CONFIG_KEY = 'dice_last_config';
+var DRAFT_KEY = 'dice_config_draft';
 var VIEW_SETTINGS_KEY = 'dice_view_settings';
 var GAME_SETTINGS_KEY = 'dice_game_settings';
 
@@ -137,6 +138,7 @@ function saveGameSettings(state) {
     allowUnlockAfterRoll: state.allowUnlockAfterRoll !== false,
     requireLockBeforeRoll: !!state.requireLockBeforeRoll,
   }));
+  saveDraft();
 }
 
 function loadGameSettings() {
@@ -163,6 +165,9 @@ function migrateDiceConfig(dc) {
       var out = s.shape ? s : Object.assign({ shape: 'DEFAULT' }, s);
       return out.color ? out : Object.assign({ color: '#FFFFFF' }, out);
     });
+    if (!dc.baseType)  dc.baseType  = 'PIPPED';
+    if (!dc.baseShape) dc.baseShape = 'DEFAULT';
+    if (!dc.baseColor) dc.baseColor = '#FFFFFF';
     return dc;
   }
   var sides = dc.sides || 6;
@@ -188,7 +193,7 @@ function migrateDiceConfig(dc) {
         return { type: 'NUMBER', value: i + 1, color: '#FFFFFF', shape: 'DEFAULT' };
     }
   });
-  return { sides: sides, sideData: sideData };
+  return { sides: sides, baseType: 'PIPPED', baseShape: 'DEFAULT', baseColor: '#FFFFFF', sideData: sideData };
 }
 
 function loadConfigurations() {
@@ -220,6 +225,9 @@ function createDefaultDiceConfig(sides) {
   sides = sides || 6;
   return {
     sides: sides,
+    baseType: 'PIPPED',
+    baseShape: 'DEFAULT',
+    baseColor: '#FFFFFF',
     sideData: Array.from({ length: sides }, function(_, i) {
       return { type: 'PIPPED', value: i + 1, color: '#FFFFFF', shape: 'DEFAULT' };
     }),
@@ -228,10 +236,10 @@ function createDefaultDiceConfig(sides) {
 
 function updateDiceConfigSides(config, newSides) {
   var arr = config.sideData.slice();
-  var lastType = arr.length > 0 ? arr[arr.length - 1].type : 'PIPPED';
-  var lastColor = arr.length > 0 ? (arr[arr.length - 1].color || '#FFFFFF') : '#FFFFFF';
-  var lastShape = arr.length > 0 ? (arr[arr.length - 1].shape || 'DEFAULT') : 'DEFAULT';
-  while (arr.length < newSides) arr.push({ type: lastType, value: arr.length + 1, color: lastColor, shape: lastShape });
+  var t = config.baseType || 'PIPPED';
+  var c = config.baseColor || '#FFFFFF';
+  var sh = config.baseShape || 'DEFAULT';
+  while (arr.length < newSides) arr.push({ type: t, value: arr.length + 1, color: c, shape: sh });
   while (arr.length > newSides) arr.pop();
   return Object.assign({}, config, { sides: newSides, sideData: arr });
 }
@@ -335,11 +343,38 @@ function updateBodyScroll() {
   document.body.style.overflow = modalOpen ? 'hidden' : '';
 }
 
+function saveDraft() {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      description: configState.description,
+      numberOfDice: configState.numberOfDice,
+      diceConfigs: configState.diceConfigs,
+      blockReThrowSeconds: configState.blockReThrowSeconds,
+      autoMysteryAfterRolls: configState.autoMysteryAfterRolls,
+      maxRolls: configState.maxRolls,
+      confirmRestartWhenMystery: configState.confirmRestartWhenMystery,
+      allowUnlockAfterRoll: configState.allowUnlockAfterRoll,
+      requireLockBeforeRoll: configState.requireLockBeforeRoll,
+    }));
+  } catch (e) {} // configState null (rolling screen) or storage quota — safe to ignore
+}
+
+function loadDraft() {
+  try {
+    var raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    var d = JSON.parse(raw);
+    if (d && Array.isArray(d.diceConfigs)) d.diceConfigs = d.diceConfigs.map(migrateDiceConfig);
+    return d;
+  } catch (e) { return null; }
+}
+
 function renderConfigScreen() {
   var root = document.getElementById('app');
   root.innerHTML = buildConfigScreenHtml();
   attachConfigEvents();
   updateBodyScroll();
+  saveDraft();
 }
 
 function buildConfigScreenHtml() {
@@ -393,17 +428,20 @@ function buildColorPickerModalHtml() {
   if (!m) return '';
   var si = m.sideIndex;
   var di = m.diceIndex;
-  var cur = configState.diceConfigs[di].sideData[si].color;
+  var isBasic = si === -1;
+  var cfg = configState.diceConfigs[di];
+  var cur = isBasic ? cfg.baseColor : cfg.sideData[si].color;
   var swatches = AVAILABLE_COLORS.map(function(ac) {
     var isActive = ac.hex === cur;
     return '<button class="color-swatch' + (isActive ? ' active' : '') + '" ' +
       'data-color-swatch="' + ac.hex + '" data-side="' + si + '" data-dice="' + di + '" ' +
       'style="background:' + ac.hex + '" title="' + ac.name + '"></button>';
   }).join('');
+  var subtitle = isBasic ? 'Dice ' + (di + 1) + ' - Basic' : 'Dice ' + (di + 1) + ' - Side ' + (si + 1);
   return '<div class="modal-overlay" id="color-picker-overlay">' +
     '<div class="modal color-picker-modal">' +
       '<div class="modal-header-row">' +
-        '<div><h2 class="modal-title">Select Color</h2><div class="modal-subtitle">Dice ' + (di + 1) + ' - Side ' + (si + 1) + '</div></div>' +
+        '<div><h2 class="modal-title">Select Color</h2><div class="modal-subtitle">' + subtitle + '</div></div>' +
         '<button class="icon-btn" id="close-color-picker-btn">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
             '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' +
@@ -422,20 +460,13 @@ function buildTypePickerModalHtml() {
   if (!m) return '';
   var si = m.sideIndex;
   var di = m.diceIndex;
-  var cur = configState.diceConfigs[di].sideData[si].type || 'NUMBER';
-  var pipSvg = '<svg class="type-pick-pip-svg" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">' +
-    '<rect x="1" y="1" width="38" height="38" rx="7" ry="7" fill="none" stroke="currentColor" stroke-width="2.5"/>' +
-    '<circle cx="11" cy="11" r="4" fill="currentColor"/>' +
-    '<circle cx="29" cy="11" r="4" fill="currentColor"/>' +
-    '<circle cx="11" cy="20" r="4" fill="currentColor"/>' +
-    '<circle cx="29" cy="20" r="4" fill="currentColor"/>' +
-    '<circle cx="11" cy="29" r="4" fill="currentColor"/>' +
-    '<circle cx="29" cy="29" r="4" fill="currentColor"/>' +
-  '</svg>';
+  var isBasic = si === -1;
+  var cfg = configState.diceConfigs[di];
+  var cur = isBasic ? cfg.baseType : (cfg.sideData[si].type || 'NUMBER');
   var types = [
     { val: 'NUMBER', label: 'Number',      icon: '123' },
     { val: 'TEXT',   label: 'Text/Symbol', icon: 'Abc' },
-    { val: 'PIPPED', label: 'Pipped',      icon: pipSvg },
+    { val: 'PIPPED', label: 'Pipped',      icon: pipPickSvg() },
   ];
   var cards = types.map(function(t) {
     return '<button class="type-pick-card' + (t.val === cur ? ' active' : '') + '" ' +
@@ -444,10 +475,11 @@ function buildTypePickerModalHtml() {
       '<span class="type-pick-label">' + t.label + '</span>' +
     '</button>';
   }).join('');
+  var subtitle = isBasic ? 'Dice ' + (di + 1) + ' - Basic' : 'Dice ' + (di + 1) + ' - Side ' + (si + 1);
   return '<div class="modal-overlay" id="type-picker-overlay">' +
     '<div class="modal type-picker-modal">' +
       '<div class="modal-header-row">' +
-        '<div><h2 class="modal-title">Select Type</h2><div class="modal-subtitle">Dice ' + (di + 1) + ' - Side ' + (si + 1) + '</div></div>' +
+        '<div><h2 class="modal-title">Select Type</h2><div class="modal-subtitle">' + subtitle + '</div></div>' +
         '<button class="icon-btn" id="close-type-picker-btn">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
             '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' +
@@ -464,7 +496,9 @@ function buildShapePickerModalHtml() {
   if (!m) return '';
   var si = m.sideIndex;
   var di = m.diceIndex;
-  var cur = (configState.diceConfigs[di].sideData[si].shape) || 'DEFAULT';
+  var isBasic = si === -1;
+  var cfg = configState.diceConfigs[di];
+  var cur = isBasic ? cfg.baseShape : (cfg.sideData[si].shape || 'DEFAULT');
   var items = SHAPES.map(function(sh) {
     var isActive = sh.id === cur;
     var clipVal = getShapeClip(sh.id);
@@ -475,10 +509,11 @@ function buildShapePickerModalHtml() {
       '<span class="shape-pick-label">' + sh.label + '</span>' +
     '</button>';
   }).join('');
+  var subtitle = isBasic ? 'Dice ' + (di + 1) + ' - Basic' : 'Dice ' + (di + 1) + ' - Side ' + (si + 1);
   return '<div class="modal-overlay" id="shape-picker-overlay">' +
     '<div class="modal shape-picker-modal">' +
       '<div class="modal-header-row">' +
-        '<div><h2 class="modal-title">Select Shape</h2><div class="modal-subtitle">Dice ' + (di + 1) + ' - Side ' + (si + 1) + '</div></div>' +
+        '<div><h2 class="modal-title">Select Shape</h2><div class="modal-subtitle">' + subtitle + '</div></div>' +
         '<button class="icon-btn" id="close-shape-picker-btn">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
             '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' +
@@ -731,6 +766,7 @@ function buildConfigFormHtml() {
 
 function buildDiceConfigExpanded(cfg, index) {
   return '<div class="dice-config-expanded">' +
+    buildDiceBasicSettingsHtml(cfg, index) +
     '<div class="sides-count-row">' +
       '<span class="label-text">Sides:</span>' +
       '<div class="counter">' +
@@ -743,24 +779,82 @@ function buildDiceConfigExpanded(cfg, index) {
   '</div>';
 }
 
+function pipPickSvg() {
+  return '<svg class="type-pick-pip-svg" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">' +
+    '<rect x="1" y="1" width="38" height="38" rx="7" ry="7" fill="none" stroke="currentColor" stroke-width="2.5"/>' +
+    '<circle cx="11" cy="11" r="4" fill="currentColor"/>' +
+    '<circle cx="29" cy="11" r="4" fill="currentColor"/>' +
+    '<circle cx="11" cy="20" r="4" fill="currentColor"/>' +
+    '<circle cx="29" cy="20" r="4" fill="currentColor"/>' +
+    '<circle cx="11" cy="29" r="4" fill="currentColor"/>' +
+    '<circle cx="29" cy="29" r="4" fill="currentColor"/>' +
+  '</svg>';
+}
+
+function typeIconHtml(type) {
+  if (type === 'NUMBER') return '123';
+  if (type === 'TEXT')   return 'Abc';
+  return pipPickSvg();
+}
+
+function shapeIconSpanHtml(shape) {
+  var clip = getShapeClip(shape);
+  return '<span class="side-shape-icon" style="' +
+    (clip ? 'clip-path:' + clip + ';border-radius:0' : 'border-radius:12%') + '"></span>';
+}
+
+function colorDotBtnHtml(color, dataAttrs) {
+  return '<button class="side-color-dot-btn" ' + dataAttrs + ' title="Pick color">' +
+    '<span class="side-color-dot" style="background:' + color + '"></span>' +
+  '</button>';
+}
+
+function shapeBtnHtml(shape, dataAttrs) {
+  return '<button class="side-shape-btn" ' + dataAttrs + ' title="Pick form">' +
+    shapeIconSpanHtml(shape) +
+  '</button>';
+}
+
+function typeBtnHtml(labelInnerHtml, dataAttrs) {
+  return '<button class="side-type-btn" ' + dataAttrs + '>' +
+    '<span class="side-type-label">' + labelInnerHtml + '</span>' +
+  '</button>';
+}
+
+var TYPE_TEXT_LABELS = { NUMBER: 'Number', TEXT: 'Text', PIPPED: 'Pipped' };
+
+function buildDiceBasicSettingsHtml(cfg, index) {
+  var baseType = cfg.baseType || 'PIPPED';
+  var baseShape = cfg.baseShape || 'DEFAULT';
+  var baseColor = cfg.baseColor || '#FFFFFF';
+
+  var basicAttrs = 'data-dice="' + index + '"';
+  var typeBtn  = typeBtnHtml(TYPE_TEXT_LABELS[baseType] || baseType, 'data-type-pick="-1" ' + basicAttrs);
+  var shapeBtn = shapeBtnHtml(baseShape, 'data-shape-pick="-1" ' + basicAttrs);
+  var colorBtn = colorDotBtnHtml(baseColor, 'data-color-pick="-1" ' + basicAttrs);
+
+  return '<div class="basic-settings-section">' +
+    '<h4 class="basic-settings-title">Die Basic Settings</h4>' +
+    '<div class="basic-settings-row">' +
+      '<div class="basic-settings-field">' +
+        '<span class="basic-settings-label">Type:</span>' + typeBtn +
+      '</div>' +
+      '<div class="basic-settings-field">' +
+        '<span class="basic-settings-label">Shape:</span>' + shapeBtn +
+      '</div>' +
+      '<div class="basic-settings-field">' +
+        '<span class="basic-settings-label">Color:</span>' + colorBtn +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
 function buildUnifiedSidesTable(cfg, index) {
-  var typeLabels = { NUMBER: 'Number', TEXT: 'Text', PIPPED: 'Pipped' };
-
   var rows = (cfg.sideData || []).map(function(side, si) {
-    // Type button
-    var typeBtn =
-      '<button class="side-type-btn" data-type-pick="' + si + '" data-dice="' + index + '">' +
-        '<span class="side-type-label">' + (typeLabels[side.type] || side.type) + '</span>' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="side-type-edit-icon">' +
-          '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>' +
-          '<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>' +
-        '</svg>' +
-      '</button>';
-
-    // Color dot — click opens color picker modal
-    var colorSelect =
-      '<button class="side-color-dot-btn" style="background:' + (side.color || '#FFFFFF') + '" ' +
-        'data-color-pick="' + si + '" data-dice="' + index + '" title="Pick color"></button>';
+    var pickAttrs = 'data-dice="' + index + '"';
+    var typeBtn  = typeBtnHtml(typeIconHtml(side.type), 'data-type-pick="' + si + '" ' + pickAttrs);
+    var shapeBtn = shapeBtnHtml(side.shape || 'DEFAULT', 'data-shape-pick="' + si + '" ' + pickAttrs);
+    var colorBtn = colorDotBtnHtml(side.color || '#FFFFFF', 'data-color-pick="' + si + '" ' + pickAttrs);
 
     // Value / text / pip cell
     var valueCell;
@@ -784,20 +878,11 @@ function buildUnifiedSidesTable(cfg, index) {
       valueCell = '<span class="side-none">—</span>';
     }
 
-    // Form (shape) dot — click opens shape picker modal
-    var curShape = side.shape || 'DEFAULT';
-    var shapeClip = getShapeClip(curShape);
-    var shapeBtn =
-      '<button class="side-shape-btn" ' +
-        'data-shape-pick="' + si + '" data-dice="' + index + '" title="Pick form">' +
-        '<span class="side-shape-icon" style="' + (shapeClip ? 'clip-path:' + shapeClip + ';border-radius:0' : 'border-radius:12%') + '"></span>' +
-      '</button>';
-
     return '<div class="side-row">' +
       '<span class="side-num">' + (si + 1) + '</span>' +
       typeBtn +
       shapeBtn +
-      colorSelect +
+      colorBtn +
       '<div class="side-val-wrap">' + valueCell + '</div>' +
     '</div>';
   }).join('');
@@ -847,6 +932,7 @@ function attachConfigEvents() {
     showConfirmModal('Remove all configurations and reload the pre-defined ones?', function() {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(LAST_CONFIG_KEY);
+      localStorage.removeItem(DRAFT_KEY);
       seedDefaultConfigurations();
       configState.showConfigurations = false;
       initConfigScreen();
@@ -935,6 +1021,7 @@ function attachConfigEvents() {
   // Config form
   el('config-name') && el('config-name').addEventListener('input', function(e) {
     configState.description = e.target.value;
+    saveDraft();
   });
   el('dice-minus') && el('dice-minus').addEventListener('click', function() {
     updateConfigNumberOfDice(s.numberOfDice - 1);
@@ -1035,9 +1122,22 @@ function attachConfigEvents() {
       var si = parseInt(btn.dataset.side);
       var i = parseInt(btn.dataset.dice);
       var cfg = configState.diceConfigs[i];
+      var newType = btn.dataset.typeSwatch;
+      if (si === -1) {
+        var sdAll = cfg.sideData.map(function(old, idx) {
+          if (old.type === newType) return old;
+          var nv;
+          if (newType === 'NUMBER') nv = idx + 1;
+          else if (newType === 'PIPPED') nv = Math.min(idx + 1, 6);
+          else nv = ''; // TEXT
+          return Object.assign({}, old, { type: newType, value: nv });
+        });
+        configState.typePickerModal = null;
+        updateDiceConfig(i, Object.assign({}, cfg, { baseType: newType, sideData: sdAll }));
+        return;
+      }
       var sd = cfg.sideData.slice();
       var old = sd[si];
-      var newType = btn.dataset.typeSwatch;
       var newVal = old.value;
       if (newType === 'NUMBER' && typeof newVal !== 'number') newVal = si + 1;
       if (newType === 'PIPPED') newVal = Math.min(Math.max(typeof old.value === 'number' ? old.value : 1, 0), 6);
@@ -1072,8 +1172,15 @@ function attachConfigEvents() {
       var si = parseInt(btn.dataset.side);
       var i = parseInt(btn.dataset.dice);
       var cfg = configState.diceConfigs[i];
+      var newColor = btn.dataset.colorSwatch;
+      if (si === -1) {
+        var sdAll = cfg.sideData.map(function(s) { return Object.assign({}, s, { color: newColor }); });
+        configState.colorPickerModal = null;
+        updateDiceConfig(i, Object.assign({}, cfg, { baseColor: newColor, sideData: sdAll }));
+        return;
+      }
       var sd = cfg.sideData.slice();
-      sd[si] = Object.assign({}, sd[si], { color: btn.dataset.colorSwatch });
+      sd[si] = Object.assign({}, sd[si], { color: newColor });
       configState.colorPickerModal = null;
       updateDiceConfig(i, Object.assign({}, cfg, { sideData: sd }));
     });
@@ -1103,8 +1210,15 @@ function attachConfigEvents() {
       var si = parseInt(btn.dataset.side);
       var i = parseInt(btn.dataset.dice);
       var cfg = configState.diceConfigs[i];
+      var newShape = btn.dataset.shapeSwatch;
+      if (si === -1) {
+        var sdAll = cfg.sideData.map(function(s) { return Object.assign({}, s, { shape: newShape }); });
+        configState.shapePickerModal = null;
+        updateDiceConfig(i, Object.assign({}, cfg, { baseShape: newShape, sideData: sdAll }));
+        return;
+      }
       var sd = cfg.sideData.slice();
-      sd[si] = Object.assign({}, sd[si], { shape: btn.dataset.shapeSwatch });
+      sd[si] = Object.assign({}, sd[si], { shape: newShape });
       configState.shapePickerModal = null;
       updateDiceConfig(i, Object.assign({}, cfg, { sideData: sd }));
     });
@@ -2450,6 +2564,11 @@ window.addEventListener('popstate', function(e) {
 
 seedDefaultConfigurations();
 (function() {
+  var draft = loadDraft();
+  if (draft && Array.isArray(draft.diceConfigs) && draft.diceConfigs.length) {
+    initConfigScreen(draft, true);
+    return;
+  }
   var lastName = localStorage.getItem(LAST_CONFIG_KEY);
   if (lastName) {
     var configs = loadConfigurations();

@@ -104,6 +104,48 @@ test('type picker selects NUMBER and closes', async ({ page }) => {
   await expect(page.locator('#type-picker-overlay')).toBeHidden();
 });
 
+test('basic type change preserves values of sides already on that type', async ({ page }) => {
+  await page.evaluate(() => {
+    const cfg = configState.diceConfigs[0];
+    const sd = cfg.sideData.slice();
+    sd[0] = { type: 'TEXT', value: 'Hello', color: '#FFFFFF', shape: 'DEFAULT' };
+    sd[1] = { type: 'TEXT', value: 'World', color: '#FFFFFF', shape: 'DEFAULT' };
+    updateDiceConfig(0, Object.assign({}, cfg, { sideData: sd }));
+  });
+  await page.locator('[data-preview-open="0"]').click();
+  await page.waitForSelector('[data-type-pick="-1"][data-dice="0"]');
+  await page.locator('[data-type-pick="-1"][data-dice="0"]').click();
+  await page.waitForSelector('[data-type-swatch="TEXT"]');
+  await page.locator('[data-type-swatch="TEXT"]').click();
+  const sd = await page.evaluate(() => configState.diceConfigs[0].sideData);
+  expect(sd[0].value).toBe('Hello');
+  expect(sd[1].value).toBe('World');
+  // Side 2 was PIPPED so it should have been reset to '' on TEXT
+  expect(sd[2].value).toBe('');
+});
+
+test('basic color change applies to every side and updates baseColor', async ({ page }) => {
+  await page.locator('[data-preview-open="0"]').click();
+  await page.waitForSelector('[data-color-pick="-1"][data-dice="0"]');
+  await page.locator('[data-color-pick="-1"][data-dice="0"]').click();
+  await page.waitForSelector('[data-color-swatch="#E53935"]');
+  await page.locator('[data-color-swatch="#E53935"]').click();
+  const cfg = await page.evaluate(() => configState.diceConfigs[0]);
+  expect(cfg.baseColor).toBe('#E53935');
+  for (const s of cfg.sideData) expect(s.color).toBe('#E53935');
+});
+
+test('basic shape change applies to every side and updates baseShape', async ({ page }) => {
+  await page.locator('[data-preview-open="0"]').click();
+  await page.waitForSelector('[data-shape-pick="-1"][data-dice="0"]');
+  await page.locator('[data-shape-pick="-1"][data-dice="0"]').click();
+  await page.waitForSelector('[data-shape-swatch="CIRCLE"]');
+  await page.locator('[data-shape-swatch="CIRCLE"]').click();
+  const cfg = await page.evaluate(() => configState.diceConfigs[0]);
+  expect(cfg.baseShape).toBe('CIRCLE');
+  for (const s of cfg.sideData) expect(s.shape).toBe('CIRCLE');
+});
+
 test('type picker selects TEXT and shows text input', async ({ page }) => {
   await page.locator('[data-preview-open="0"]').click();
   await page.locator('[data-type-pick="0"][data-dice="0"]').click();

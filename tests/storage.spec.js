@@ -2,6 +2,9 @@ import { test, expect, gotoApp } from './fixtures.js';
 
 test.beforeEach(async ({ page, baseURL }) => {
   await page.goto(baseURL);
+  // Ensure a clean slate — initial boot persists a draft that would otherwise
+  // pre-empt tests that manually set up STORAGE_KEY / LAST_CONFIG_KEY.
+  await page.evaluate(() => localStorage.removeItem('dice_config_draft'));
 });
 
 // ── Boot / restore ─────────────────────────────────────────────────────────────
@@ -22,10 +25,35 @@ test('last config name is restored on page reload', async ({ page, baseURL }) =>
   await page.evaluate(() => {
     const cfg = loadConfigurations().find(c => c.description === 'Kniffel');
     if (cfg) localStorage.setItem('dice_last_config', cfg.description);
+    localStorage.removeItem('dice_config_draft');
   });
   await page.reload();
   await page.waitForSelector('.config-screen');
   await expect(page.locator('#config-name')).toHaveValue('Kniffel');
+});
+
+test('side type change persists across page reload (no explicit save)', async ({ page, baseURL }) => {
+  await gotoApp(page, baseURL);
+  await page.evaluate(() => {
+    const cfg = loadConfigurations().find(c => c.description === 'Kniffel');
+    if (cfg) localStorage.setItem('dice_last_config', cfg.description);
+  });
+  await page.reload();
+  await page.waitForSelector('.config-screen');
+  // Sanity: side 1 of die 0 starts as PIPPED in Kniffel.
+  expect(await page.evaluate(() => configState.diceConfigs[0].sideData[1].type)).toBe('PIPPED');
+  // Mutate side 1 via the same code path the UI uses.
+  await page.evaluate(() => {
+    const cfg = configState.diceConfigs[0];
+    const sd = cfg.sideData.slice();
+    sd[1] = Object.assign({}, sd[1], { type: 'NUMBER', value: 42 });
+    updateDiceConfig(0, Object.assign({}, cfg, { sideData: sd }));
+  });
+  await page.reload();
+  await page.waitForSelector('.config-screen');
+  const sd1 = await page.evaluate(() => configState.diceConfigs[0].sideData[1]);
+  expect(sd1.type).toBe('NUMBER');
+  expect(sd1.value).toBe(42);
 });
 
 test('maxRolls is preserved across page reload', async ({ page, baseURL }) => {
@@ -33,6 +61,7 @@ test('maxRolls is preserved across page reload', async ({ page, baseURL }) => {
   await page.evaluate(() => {
     const cfg = loadConfigurations().find(c => c.description === 'Kniffel');
     if (cfg) localStorage.setItem('dice_last_config', cfg.description);
+    localStorage.removeItem('dice_config_draft');
   });
   await page.reload();
   await page.waitForSelector('#config-name');
@@ -111,6 +140,28 @@ test('loadConfigurations returns a config as-is when diceConfigs field is absent
     return loadConfigurations();
   });
   expect(result[0].description).toBe('NoDiceConfigs');
+});
+
+test('loadDraft returns null on corrupt JSON', async ({ page, baseURL }) => {
+  await gotoApp(page, baseURL);
+  const result = await page.evaluate(() => {
+    localStorage.setItem('dice_config_draft', '{corrupt!');
+    return loadDraft();
+  });
+  expect(result).toBeNull();
+});
+
+test('saveDraft swallows localStorage errors', async ({ page, baseURL }) => {
+  await gotoApp(page, baseURL);
+  await page.evaluate(() => {
+    const orig = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(k, v) {
+      if (k === 'dice_config_draft') throw new Error('quota');
+      return orig.call(this, k, v);
+    };
+    try { saveDraft(); } finally { Storage.prototype.setItem = orig; }
+  });
+  // Reaching here means saveDraft did not propagate the error.
 });
 
 test('loadConfigurations returns an empty array on corrupt storage', async ({ page, baseURL }) => {
@@ -240,12 +291,11 @@ test('deserializeConfigs throws on invalid format', async ({ page, baseURL }) =>
 
 // ── Utility functions ──────────────────────────────────────────────────────────
 
-test('updateDiceConfigSides grows sideData and inherits color from the last side', async ({ page, baseURL }) => {
+test('updateDiceConfigSides grows sideData using baseColor', async ({ page, baseURL }) => {
   await gotoApp(page, baseURL);
-  const result = await page.evaluate(() => updateDiceConfigSides({ sides: 4, sideData: [1,2,3,4].map(n => ({ type: 'NUMBER', value: n, color: '#E53935', shape: 'SQUARE' })) }, 6));
+  const result = await page.evaluate(() => updateDiceConfigSides({ sides: 4, baseType: 'NUMBER', baseColor: '#E53935', baseShape: 'SQUARE', sideData: [1,2,3,4].map(n => ({ type: 'NUMBER', value: n, color: '#E53935', shape: 'SQUARE' })) }, 6));
   expect(result.sides).toBe(6);
   expect(result.sideData.length).toBe(6);
-  // New sides inherit color from the last existing side
   expect(result.sideData[4].color).toBe('#E53935');
   expect(result.sideData[5].color).toBe('#E53935');
 });
