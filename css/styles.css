@@ -615,35 +615,84 @@ html, body {
   margin: 10px 0 12px;
 }
 
+/* Die Basic Settings — shared baseline applied to all sides */
+.basic-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 4px 0 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 8px;
+}
+.basic-settings-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-w70);
+  margin: 0 0 2px;
+}
+.basic-settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+.basic-settings-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.basic-settings-label {
+  font-size: 13px;
+  color: var(--text-w80);
+  font-weight: 600;
+}
+.basic-settings-field .side-type-btn,
+.basic-settings-field .side-shape-btn,
+.basic-settings-field .side-color-dot-btn { width: auto; padding: 6px 10px; }
+
 /* Unified sides table */
 .sides-table {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 4px;
-  margin-top: 4px;
+  margin: 4px auto 0;
+  max-width: 330px;
 }
 
-.sides-hdr {
-  display: grid;
-  grid-template-columns: 22px 90px 36px 36px auto;
+/* Flex layout per row so each row's value cell hugs its own content
+   (a NUMBER row's −/+ buttons no longer force TEXT/PIPPED rows to share width). */
+.sides-hdr, .side-row {
+  display: flex;
+  align-items: center;
   gap: 5px;
-  padding: 0 2px 2px;
 }
-.sides-hdr span {
+.sides-hdr { padding: 0 2px 2px; }
+.sides-hdr > span {
   font-size: 11px;
   font-weight: 700;
   color: var(--text-w70);
   text-transform: uppercase;
   letter-spacing: 0.4px;
   text-align: center;
+  flex-shrink: 0;
 }
-
-.side-row {
-  display: grid;
-  grid-template-columns: 22px 90px 36px 36px auto;
-  gap: 5px;
-  align-items: center;
-}
+.sides-hdr > span:nth-child(1),
+.side-row  > .side-num         { width: 22px; }
+.sides-hdr > span:nth-child(2),
+.side-row  > .side-type-btn    { width: 60px; }
+.sides-hdr > span:nth-child(3),
+.side-row  > .side-shape-btn   { width: 50px; }
+.sides-hdr > span:nth-child(4),
+.side-row  > .side-color-dot-btn { width: 50px; }
+.side-row  > .side-num,
+.side-row  > .side-type-btn,
+.side-row  > .side-shape-btn,
+.side-row  > .side-color-dot-btn { flex-shrink: 0; }
 
 .side-num {
   font-size: 13px;
@@ -673,8 +722,10 @@ html, body {
 .side-sel:focus { border-color: var(--purple); }
 .side-sel option { background: #2a2550; color: #fff; }
 
-/* Type button in sides table */
-.side-type-btn {
+/* Shared pick-button shell — used by Type / Shape / Color cells. */
+.side-type-btn,
+.side-shape-btn,
+.side-color-dot-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -689,8 +740,11 @@ html, body {
   cursor: pointer;
   transition: background 0.15s;
 }
-.side-type-btn:hover { background: rgba(255,255,255,0.18); }
-.side-type-edit-icon { width: 12px; height: 12px; flex-shrink: 0; opacity: 0.6; }
+.side-type-btn:hover,
+.side-shape-btn:hover,
+.side-color-dot-btn:hover { background: rgba(255,255,255,0.18); }
+.side-type-label { display: inline-flex; align-items: center; }
+.side-type-label .type-pick-pip-svg { width: 18px; height: 18px; }
 
 /* Type picker modal */
 .type-picker-modal { max-width: 300px; padding: 20px; }
@@ -720,18 +774,16 @@ html, body {
 .type-pick-pip-svg { width: 42px; height: 42px; color: var(--text-white); display: block; }
 .type-pick-label { font-size: 15px; font-weight: 600; color: var(--text-white); }
 
-.side-color-dot-btn {
+/* Color cell — colored dot inside the shared pick-button shell */
+.side-color-dot {
   display: block;
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  border: none;
-  cursor: pointer;
   flex-shrink: 0;
-  margin: auto;
   transition: transform 0.12s, box-shadow 0.12s;
 }
-.side-color-dot-btn:hover { transform: scale(1.18); box-shadow: 0 0 0 2px rgba(255,255,255,0.35); }
+.side-color-dot-btn:hover .side-color-dot { transform: scale(1.18); box-shadow: 0 0 0 2px rgba(255,255,255,0.35); }
 
 /* Color picker modal */
 .color-picker-modal {
@@ -767,26 +819,15 @@ html, body {
 }
 .color-none-btn:hover { background: rgba(255,255,255,0.18); color: #fff; }
 
-/* Shape button in table */
-.side-shape-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 30px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  transition: transform 0.12s;
-}
-.side-shape-btn:hover { transform: scale(1.15); }
+/* Shape cell — shape icon inside the shared pick-button shell */
 .side-shape-icon {
   display: block;
   width: 20px;
   height: 20px;
   background: #ffffff;
+  transition: transform 0.12s;
 }
+.side-shape-btn:hover .side-shape-icon { transform: scale(1.18); }
 
 /* Shape picker modal */
 .shape-picker-modal { max-width: 500px; padding: 20px; }
@@ -861,7 +902,7 @@ html, body {
 .side-num-btn:active { background: rgba(255,255,255,0.25); }
 
 .side-inp {
-  width: auto;
+  width: 120px;
   padding: 5px 6px;
   background: rgba(255,255,255,0.10);
   border: 1px solid rgba(255,255,255,0.22);
@@ -871,8 +912,8 @@ html, body {
   outline: none;
   text-align: center;
 }
-.side-inp[type="text"] { min-width: 110px; text-align: left; }
-.side-inp-num { width: 44px; -moz-appearance: textfield; text-align: center; }
+.side-inp[type="text"] { text-align: left; }
+.side-inp-num { -moz-appearance: textfield; }
 .side-inp-num::-webkit-inner-spin-button,
 .side-inp-num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
