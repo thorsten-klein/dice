@@ -1210,6 +1210,14 @@ html, body {
   line-height: 1;
 }
 .mystery-icon.individual { color: var(--blue); }
+/* Mystery dice get the same shape-wrap so they pick up the roll animation,
+   but rendered as a transparent square with a white frame. */
+.mystery-wrap {
+  background: transparent;
+  border: 2px solid var(--text-white);
+  border-radius: 12%;
+  box-sizing: border-box;
+}
 
 /* === Pip grid (PIPPED content type) === */
 .pip-grid {

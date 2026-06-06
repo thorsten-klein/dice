@@ -1708,7 +1708,9 @@ function buildDiceItem(index, cfg, value, isLocked, isHidden, isIndividualMyster
     '<div class="dice-label">Dice ' + (index + 1) + '</div>' +
     '<div class="dice-content">' +
       (showMystery
-        ? '<div class="mystery-icon' + (isIndividualMystery ? ' individual' : '') + '">?</div>'
+        ? '<div class="dice-shape-wrap mystery-wrap">' +
+            '<div class="mystery-icon' + (isIndividualMystery ? ' individual' : '') + '">?</div>' +
+          '</div>'
         : '<div class="dice-shape-wrap" style="' + shapeStyle + '">' +
             buildDiceFace(cfg, value, isLocked, fgColor) +
           '</div>') +
@@ -2380,18 +2382,19 @@ function rollDice() {
       var index = parseInt(el.dataset.index);
       var cfg = rollingState.diceConfigs[index];
       if (!cfg || !cfg.sideData) return;
+      var wrap = el.querySelector('.dice-shape-wrap');
+      // Mystery dice still rotate (the wrap is animated) but must NOT flash
+      // random faces — that would leak which die is being rolled.
+      if (!wrap || wrap.classList.contains('mystery-wrap')) return;
       var randomSide = Math.floor(Math.random() * cfg.sideData.length);
       var side = cfg.sideData[randomSide];
       var bgColor = (side && side.color) || '#FFFFFF';
       var fgColor = contrastColor(bgColor);
-      var wrap = el.querySelector('.dice-shape-wrap');
       var clip = getShapeClip((side && side.shape) || 'DEFAULT');
-      if (wrap) {
-        wrap.style.background = bgColor;
-        wrap.style.clipPath = clip || '';
-        wrap.style.borderRadius = clip ? '0' : '12%';
-        wrap.innerHTML = buildDiceFace(cfg, randomSide, false, fgColor);
-      }
+      wrap.style.background = bgColor;
+      wrap.style.clipPath = clip || '';
+      wrap.style.borderRadius = clip ? '0' : '12%';
+      wrap.innerHTML = buildDiceFace(cfg, randomSide, false, fgColor);
     });
   }, 50);
 
