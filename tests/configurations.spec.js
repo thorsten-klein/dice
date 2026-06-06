@@ -505,11 +505,14 @@ test('DnD uses NUMBER type dice with TRIANGLE shape', async ({ page }) => {
   expect(cfg.diceConfigs[0].sideData[0].shape).toBe('TRIANGLE');
 });
 
-test('all non-DnD pre-defined games use only pipped dice', async ({ page }) => {
+test('all non-DnD pre-defined games use only pipped dice (or "?"/colored-shape sides)', async ({ page }) => {
   const configs = await page.evaluate(() => loadConfigurations().filter(c => c.description !== 'DnD'));
   configs.forEach(cfg => {
     cfg.diceConfigs.forEach(dc => {
-      dc.sideData.forEach(s => expect(s.type).toBe('PIPPED'));
+      dc.sideData.forEach(s => {
+        if (s.type === 'TEXT') expect(['?', '']).toContain(s.value);
+        else expect(s.type).toBe('PIPPED');
+      });
     });
   });
 });

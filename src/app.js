@@ -56,6 +56,8 @@ var SHAPES = [
   { id: 'STAR4',       label: 'Star (4)',     clip: 'polygon(50% 0%, 64.1% 35.9%, 100% 50%, 64.1% 64.1%, 50% 100%, 35.9% 64.1%, 0% 50%, 35.9% 35.9%)' },
   { id: 'STAR8',       label: 'Star (8)',     clip: 'polygon(50% 0%, 57.7% 31.5%, 85.4% 14.6%, 68.5% 42.4%, 100% 50%, 68.5% 57.7%, 85.4% 85.4%, 57.7% 68.5%, 50% 100%, 42.4% 68.5%, 14.6% 85.4%, 31.5% 57.7%, 0% 50%, 31.5% 42.4%, 14.6% 14.6%, 42.4% 31.5%)' },
   { id: 'CROSS',       label: 'Cross',        clip: 'polygon(35% 0%, 65% 0%, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0% 65%, 0% 35%, 35% 35%)' },
+  // CROSS_45: CROSS rotated 45° around (50,50). Each (x,y) → (50+(x-50-y+50)·√2/2, 50+(x-50+y-50)·√2/2).
+  { id: 'CROSS_45',    label: 'Cross (45°)',  clip: 'polygon(74.7% 4%, 96% 25.3%, 71.2% 50%, 96% 74.7%, 74.7% 96%, 50% 71.2%, 25.3% 96%, 4% 74.7%, 28.8% 50%, 4% 25.3%, 25.3% 4%, 50% 28.8%)' },
   // FLOWER4/5: 4/5 circles of r=20% at offset 30% from center, unioned via SVG clipPath.
   // clipPathUnits="objectBoundingBox" makes coordinates relative (0–1) so they scale automatically.
   { id: 'FLOWER4',     label: 'Flower (4)',   clip: 'url(#clip-flower4)' },
@@ -2287,6 +2289,9 @@ function cn(number, color) { return { number: number, color: color }; }
 function ps(n, color) { return { type: 'PIPPED', value: n, color: color || '#FFFFFF' }; }
 function ns(n) { return { type: 'NUMBER', value: n, color: '#FFFFFF', shape: 'TRIANGLE' }; }
 function pip6(color) { return [ps(1,color),ps(2,color),ps(3,color),ps(4,color),ps(5,color),ps(6,color)]; }
+function wild(color) { return { type: 'TEXT', value: '?', color: color }; }
+function pip5q(color) { return [ps(1,color),ps(2,color),ps(3,color),ps(4,color),ps(5,color),wild(color)]; }
+function cross45(color) { return { type: 'TEXT', value: '', color: color, shape: 'CROSS_45' }; }
 
 var DEFAULT_CONFIGS = [
   {
@@ -2362,14 +2367,18 @@ var DEFAULT_CONFIGS = [
     blockReThrowSeconds: 0,
     autoMysteryAfterRolls: 0,
     maxRolls: 1,
-    diceConfigs: [
-      { sides: 6, sideData: [ps(1,'#000000'),ps(2,'#1E88E5'),ps(3,'#FF6F00'),ps(4,'#E53935'),ps(5,'#43A047'),ps(6,'#FDD835')] },
-      { sides: 6, sideData: [ps(1,'#000000'),ps(2,'#1E88E5'),ps(3,'#FF6F00'),ps(4,'#E53935'),ps(5,'#43A047'),ps(6,'#FDD835')] },
-      { sides: 6, sideData: [ps(1,'#000000'),ps(2,'#1E88E5'),ps(3,'#FF6F00'),ps(4,'#E53935'),ps(5,'#43A047'),ps(6,'#FDD835')] },
-      { sides: 6, sideData: pip6() },
-      { sides: 6, sideData: pip6() },
-      { sides: 6, sideData: pip6() }
-    ]
+    diceConfigs: (function() {
+      var colorCross = [cross45('#FDD835'), cross45('#1E88E5'), cross45('#43A047'), cross45('#FF6F00'), cross45('#E53935'), cross45('#000000')];
+      var blackPipQ = pip5q('#000000');
+      return [
+        { sides: 6, sideData: colorCross },
+        { sides: 6, sideData: colorCross },
+        { sides: 6, sideData: colorCross },
+        { sides: 6, sideData: blackPipQ },
+        { sides: 6, sideData: blackPipQ },
+        { sides: 6, sideData: blackPipQ }
+      ];
+    })()
   },
   {
     description: 'Kribbeln',
