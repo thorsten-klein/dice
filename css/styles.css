@@ -326,6 +326,22 @@ html, body {
 .setting-num-inp::-webkit-outer-spin-button { display: none; }
 .setting-num-inp:focus { outline: none; border-color: var(--purple); }
 
+/* Rolls-list (Auto Mystery, Enforce Reveal): toggle-driven list of roll numbers */
+.rolls-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding-left: 4px; }
+.rolls-list-row { display: flex; align-items: center; gap: 8px; }
+.rolls-list-prefix { font-size: 13px; color: var(--text-w70); }
+.rolls-list-remove {
+  background: none; border: none; color: var(--text-w70); cursor: pointer;
+  font-size: 20px; line-height: 1; padding: 4px 8px; border-radius: 4px;
+}
+.rolls-list-remove:hover { color: var(--text-white); background: rgba(255,255,255,0.10); }
+.rolls-list-add {
+  background: rgba(255,255,255,0.08); border: 1px dashed rgba(255,255,255,0.25);
+  color: var(--text-w90); cursor: pointer; padding: 6px 12px; border-radius: 6px;
+  font-size: 13px; font-weight: 600; align-self: flex-start; margin-top: 2px;
+}
+.rolls-list-add:hover { background: rgba(255,255,255,0.15); }
+
 /* Size +/- controls inside modal */
 .size-controls {
   display: flex;

@@ -326,9 +326,12 @@ test('rolling settings game inputs update state', async ({ page, baseURL }) => {
   await page.locator('#r-block-val').fill('5');
   await page.locator('#r-block-val').dispatchEvent('change');
   expect(await page.locator('#r-block-val').inputValue()).toBe('5s');
-  await page.locator('#r-mystery-val').fill('3');
-  await page.locator('#r-mystery-val').dispatchEvent('change');
-  expect(await page.locator('#r-mystery-val').inputValue()).toBe('3');
+  // Toggle the mystery list on, set its first row to 3
+  await page.locator('label.toggle-switch:has([data-rolls-toggle="r-mystery-list"]) .toggle-slider').click();
+  const mInput = page.locator('[data-rolls-input="r-mystery-list"]').first();
+  await mInput.fill('3');
+  await mInput.dispatchEvent('change');
+  expect(await page.evaluate(() => rollingState.autoMysteryAfterRolls)).toEqual([3]);
   await page.locator('#r-limit-rolls-val').fill('5');
   await page.locator('#r-limit-rolls-val').dispatchEvent('change');
   expect(await page.locator('#r-limit-rolls-val').inputValue()).toBe('5');

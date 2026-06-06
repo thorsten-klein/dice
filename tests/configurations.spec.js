@@ -386,11 +386,63 @@ test('game settings persist per config: load → refresh keeps settings, change 
   expect(await page.locator('#block-val').inputValue()).toBe('Off');
 });
 
-test('auto-mystery input is visible and updates state via direct entry', async ({ page }) => {
-  await page.waitForSelector('#mystery-val');
-  await page.locator('#mystery-val').fill('3');
-  await page.locator('#mystery-val').dispatchEvent('change');
-  expect(await page.locator('#mystery-val').inputValue()).toBe('3');
+test('rolls-list: +/− buttons skip values already in the list and clamp at 1', async ({ page }) => {
+  // Seed two rows directly: [1, 3]
+  await page.evaluate(() => {
+    configState.autoMysteryAfterRolls = [1, 3];
+    renderConfigScreen();
+  });
+  // Increment row 0 (=1) → next free above 1 is 2 (3 is taken)
+  await page.locator('[data-rolls-incr="mystery-list"][data-idx="0"]').click();
+  expect(await page.evaluate(() => configState.autoMysteryAfterRolls)).toEqual([2, 3]);
+  // Increment row 1 (=3) → 4 (no collision)
+  await page.locator('[data-rolls-incr="mystery-list"][data-idx="1"]').click();
+  expect(await page.evaluate(() => configState.autoMysteryAfterRolls)).toEqual([2, 4]);
+  // Decrement row 1 (=4) → next free below 4 is 3 (2 is taken at row 0)
+  await page.locator('[data-rolls-decr="mystery-list"][data-idx="1"]').click();
+  expect(await page.evaluate(() => configState.autoMysteryAfterRolls)).toEqual([2, 3]);
+  // Decrement row 0 (=2) → 1
+  await page.locator('[data-rolls-decr="mystery-list"][data-idx="0"]').click();
+  expect(await page.evaluate(() => configState.autoMysteryAfterRolls)).toEqual([1, 3]);
+  // Decrement row 0 (=1) → no room below (would be 0); should leave list unchanged
+  await page.locator('[data-rolls-decr="mystery-list"][data-idx="0"]').click();
+  expect(await page.evaluate(() => configState.autoMysteryAfterRolls)).toEqual([1, 3]);
+});
+
+test('rolls-list: × removes a row; toggle OFF clears the list', async ({ page }) => {
+  await page.evaluate(() => {
+    configState.autoMysteryAfterRolls = [1, 2, 3];
+    renderConfigScreen();
+  });
+  // Remove middle row
+  await page.locator('[data-rolls-remove="mystery-list"][data-idx="1"]').click();
+  expect(await page.evaluate(() => configState.autoMysteryAfterRolls)).toEqual([1, 3]);
+  // Toggle off
+  await page.locator('label.toggle-switch:has([data-rolls-toggle="mystery-list"]) .toggle-slider').click();
+  expect(await page.evaluate(() => configState.autoMysteryAfterRolls)).toEqual([]);
+});
+
+test('enforce-reveal list: same UI keyed by enforce-list field', async ({ page }) => {
+  await page.locator('label.toggle-switch:has([data-rolls-toggle="enforce-list"]) .toggle-slider').click();
+  expect(await page.evaluate(() => configState.enforceRevealAfterRolls)).toEqual([1]);
+  await page.locator('[data-rolls-add="enforce-list"]').click();
+  expect(await page.evaluate(() => configState.enforceRevealAfterRolls)).toEqual([1, 2]);
+});
+
+test('auto-mystery list: toggle ON adds a default row, +Add appends next free, value persists', async ({ page }) => {
+  await page.locator('label.toggle-switch:has([data-rolls-toggle="mystery-list"]) .toggle-slider').click();
+  // Initial row created with value 1
+  expect(await page.locator('[data-rolls-input="mystery-list"]').first().inputValue()).toBe('1');
+  // Add another row -> next free is 2 (1 is taken)
+  await page.locator('[data-rolls-add="mystery-list"]').click();
+  const inputs = page.locator('[data-rolls-input="mystery-list"]');
+  expect(await inputs.count()).toBe(2);
+  expect(await inputs.nth(1).inputValue()).toBe('2');
+  // Direct entry on row 1: try '2' (taken) -> bumped to next free 3
+  await inputs.nth(0).fill('2');
+  await inputs.nth(0).dispatchEvent('change');
+  const state = await page.evaluate(() => configState.autoMysteryAfterRolls);
+  expect(state).toEqual([3, 2]);
 });
 
 test('max rolls input is visible and updates state via direct entry', async ({ page }) => {

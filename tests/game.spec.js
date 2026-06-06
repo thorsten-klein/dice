@@ -243,16 +243,16 @@ test('right-clicking a die toggles individual mystery', async ({ page, baseURL }
   await expect(page.locator('.dice-face[data-index="0"] .mystery-icon')).toBeHidden();
 });
 
-test('auto-mystery triggers after N rolls on unlocked dice only', async ({ page, baseURL }) => {
-  await gotoRolling(page, baseURL, { autoMysteryAfterRolls: 1, diceConfigs: BASE_DICE });
-  // Roll 1 already happened on init; rolling again hits the threshold and triggers mystery
+test('auto-mystery triggers at listed roll on unlocked dice only', async ({ page, baseURL }) => {
+  await gotoRolling(page, baseURL, { autoMysteryAfterRolls: [2], diceConfigs: BASE_DICE });
+  // Roll 1 already happened on init (no mystery — 1 not in list). Click → roll 2 → trigger.
   await page.click('#roll-btn');
   await page.waitForTimeout(600);
   await expect(page.locator('.mystery-icon')).toBeVisible();
 });
 
 test('auto-mystery does not apply to locked dice', async ({ page, baseURL }) => {
-  await gotoRolling(page, baseURL, { numberOfDice: 2, autoMysteryAfterRolls: 1, diceConfigs: [BASE_DICE[0], BASE_DICE[0]] });
+  await gotoRolling(page, baseURL, { numberOfDice: 2, autoMysteryAfterRolls: [2], diceConfigs: [BASE_DICE[0], BASE_DICE[0]] });
   await page.locator('.dice-face[data-index="0"]').click();
   await page.click('#roll-btn');
   await page.waitForTimeout(600);
