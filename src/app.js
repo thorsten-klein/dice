@@ -146,6 +146,7 @@ function saveGameSettings(state) {
     confirmRestartWhenMystery: state.confirmRestartWhenMystery !== false,
     allowUnlockAfterRoll: state.allowUnlockAfterRoll !== false,
     requireLockBeforeRoll: !!state.requireLockBeforeRoll,
+    countPips: !!state.countPips,
   }));
   saveDraft();
 }
@@ -323,6 +324,7 @@ function initConfigScreen(preload, isBootRestore) {
     confirmRestartWhenMystery: true,
     allowUnlockAfterRoll: true,
     requireLockBeforeRoll: false,
+    countPips: false,
     showConfigurations: false,
     configsSortKey: 'name',
     configsSortAsc: true,
@@ -345,6 +347,7 @@ function initConfigScreen(preload, isBootRestore) {
       if (gs.confirmRestartWhenMystery !== undefined) configState.confirmRestartWhenMystery = gs.confirmRestartWhenMystery;
       if (gs.allowUnlockAfterRoll !== undefined) configState.allowUnlockAfterRoll = gs.allowUnlockAfterRoll;
       if (gs.requireLockBeforeRoll !== undefined) configState.requireLockBeforeRoll = gs.requireLockBeforeRoll;
+      if (gs.countPips !== undefined) configState.countPips = gs.countPips;
     }
   }
   history.replaceState({ screen: 'config' }, '');
@@ -369,6 +372,7 @@ function saveDraft() {
       confirmRestartWhenMystery: configState.confirmRestartWhenMystery,
       allowUnlockAfterRoll: configState.allowUnlockAfterRoll,
       requireLockBeforeRoll: configState.requireLockBeforeRoll,
+      countPips: !!configState.countPips,
     }));
   } catch (e) {} // configState null (rolling screen) or storage quota — safe to ignore
 }
@@ -632,7 +636,8 @@ function buildGameSettingsHtml(state, pfx) {
          buildGameSettingRow(pfx, 'limit-rolls-val', 'Limit number of rolls', mx, 'Specify a maximum number of rolls per round (0 = Off)', null, 'Off') +
          buildGameSettingToggle(pfx, 'confirm-restart', 'Confirm restart in case of unrevealed dice', cr, 'Ask before restarting when mystery dice are active') +
          buildGameSettingToggle(pfx, 'allow-unlock', 'Allow unlocking dice after re-roll', ul, 'Locked dice can be unlocked again in next roll') +
-         buildGameSettingToggle(pfx, 'require-lock', 'Require lock before re-roll', rl, 'At least one die must be newly locked before rolling again');
+         buildGameSettingToggle(pfx, 'require-lock', 'Require lock before re-roll', rl, 'At least one die must be newly locked before rolling again') +
+         buildGameSettingToggle(pfx, 'count-pips', 'Count', !!state.countPips, 'Show pip sum above the Restart/Roll buttons (only for pipped dice)');
 }
 
 function attachGameSettingsEvents(state, pfx, rerender) {
@@ -749,6 +754,7 @@ function attachGameSettingsEvents(state, pfx, rerender) {
   wireToggle('confirm-restart', function(val) { state.confirmRestartWhenMystery = val; saveGameSettings(state); });
   wireToggle('allow-unlock',    function(val) { state.allowUnlockAfterRoll = val; saveGameSettings(state); });
   wireToggle('require-lock',    function(val) { state.requireLockBeforeRoll = val; saveGameSettings(state); if (rerender) rerender(); });
+  wireToggle('count-pips',      function(val) { state.countPips = val; saveGameSettings(state); if (rerender) rerender(); });
 
   var decrSel = pfx ? '[data-setting-decr^="' + pfx + '"]' : '[data-setting-decr]';
   var incrSel = pfx ? '[data-setting-incr^="' + pfx + '"]' : '[data-setting-incr]';
@@ -873,19 +879,21 @@ function buildConfigFormHtml() {
       '</div>' +
     '</div>' +
     '<div class="bottom-actions">' +
-      '<button class="btn btn-primary" id="save-btn">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-          '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>' +
-          '<polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>' +
-        '</svg>' +
-        'Save configuration' +
-      '</button>' +
-      '<button class="btn btn-green" id="start-btn">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-          '<polygon points="5 3 19 12 5 21 5 3"/>' +
-        '</svg>' +
-        'Start Game' +
-      '</button>' +
+      '<div class="bottom-actions-row">' +
+        '<button class="btn btn-primary" id="save-btn">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>' +
+            '<polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>' +
+          '</svg>' +
+          'Save configuration' +
+        '</button>' +
+        '<button class="btn btn-green" id="start-btn">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<polygon points="5 3 19 12 5 21 5 3"/>' +
+          '</svg>' +
+          'Start Game' +
+        '</button>' +
+      '</div>' +
     '</div>' +
   '</div>';
 }
@@ -1128,6 +1136,7 @@ function attachConfigEvents() {
           confirmRestartWhenMystery: cfg.confirmRestartWhenMystery !== false,
           allowUnlockAfterRoll: cfg.allowUnlockAfterRoll !== false,
           requireLockBeforeRoll: !!cfg.requireLockBeforeRoll,
+          countPips: !!cfg.countPips,
           showConfigurations: false,
         };
         Object.assign(configState, loaded);
@@ -1170,6 +1179,7 @@ function attachConfigEvents() {
       confirmRestartWhenMystery: configState.confirmRestartWhenMystery !== false,
       allowUnlockAfterRoll: configState.allowUnlockAfterRoll !== false,
       requireLockBeforeRoll: !!configState.requireLockBeforeRoll,
+      countPips: !!configState.countPips,
     });
     localStorage.setItem(LAST_CONFIG_KEY, desc);
     showToast("Configuration '" + desc + "' saved");
@@ -1185,6 +1195,7 @@ function attachConfigEvents() {
       confirmRestartWhenMystery: configState.confirmRestartWhenMystery !== false,
       allowUnlockAfterRoll: configState.allowUnlockAfterRoll !== false,
       requireLockBeforeRoll: !!configState.requireLockBeforeRoll,
+      countPips: !!configState.countPips,
     });
   });
   attachGameSettingsEvents(configState, '', renderConfigScreen);
@@ -1460,6 +1471,7 @@ function syncGameSettingsFromRolling() {
   configState.confirmRestartWhenMystery = rollingState.confirmRestartWhenMystery !== false;
   configState.allowUnlockAfterRoll = rollingState.allowUnlockAfterRoll !== false;
   configState.requireLockBeforeRoll = !!rollingState.requireLockBeforeRoll;
+  configState.countPips = !!rollingState.countPips;
   saveGameSettings(configState);
 }
 
@@ -1483,6 +1495,8 @@ function initRollingScreen(params) {
     confirmRestartWhenMystery: params.confirmRestartWhenMystery !== false,
     allowUnlockAfterRoll: params.allowUnlockAfterRoll !== false,
     requireLockBeforeRoll: !!params.requireLockBeforeRoll,
+    countPips: !!params.countPips,
+    showCountModal: false,
     revealRequired: enforceList.indexOf(1) !== -1,
     rollCount: 1,
     roundNumber: 1,
@@ -1589,6 +1603,7 @@ function buildRollingScreenHtml() {
     buildRollingInfoModal(s) +
     buildRollingHistoryModal() +
     buildBackConfirmModal() +
+    buildCountModal() +
     '<div class="header">' +
       '<button class="icon-btn" id="back-btn">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>' +
@@ -1636,21 +1651,26 @@ function buildRollingScreenHtml() {
     '</div>' +
 
     '<div class="bottom-actions">' +
-      '<button class="btn btn-orange" id="reset-btn">' +
-        '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' +
-          '<path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"/>' +
-        '</svg>' +
-        'Restart' +
-      '</button>' +
-      '<button class="btn btn-green' + (blocked || maxed || allLocked || needsLock || needsReveal ? ' disabled' : '') + '" id="roll-btn"' + (blocked || maxed || allLocked || needsLock || needsReveal ? ' disabled' : '') + '>' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-          '<path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>' +
-        '</svg>' +
-        '<span style="display:flex;flex-direction:column;align-items:flex-start;gap:0;">' +
-          '<span>' + (maxed ? 'Max reached' : blocked ? 'Wait ' + s.remainingBlockSeconds + 's' : allLocked ? 'All locked' : needsLock ? 'Lock a die first' : needsReveal ? 'Reveal first' : 'Roll') + '</span>' +
-          (s.swipeToRoll && !maxed && !blocked && !allLocked && !needsLock && !needsReveal ? '<span style="font-size:10px;opacity:0.7;font-weight:400;line-height:1;">Swipe left/right</span>' : '') +
-        '</span>' +
-      '</button>' +
+      (s.countPips && allPippedDice(s.diceConfigs)
+        ? '<button class="pip-count-summary" id="pip-count-summary" type="button">Sum: <b>' + pipCountSummary().total + '</b></button>'
+        : '') +
+      '<div class="bottom-actions-row">' +
+        '<button class="btn btn-orange" id="reset-btn">' +
+          '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' +
+            '<path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"/>' +
+          '</svg>' +
+          'Restart' +
+        '</button>' +
+        '<button class="btn btn-green' + (blocked || maxed || allLocked || needsLock || needsReveal ? ' disabled' : '') + '" id="roll-btn"' + (blocked || maxed || allLocked || needsLock || needsReveal ? ' disabled' : '') + '>' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>' +
+          '</svg>' +
+          '<span style="display:flex;flex-direction:column;align-items:flex-start;gap:0;">' +
+            '<span>' + (maxed ? 'Max reached' : blocked ? 'Wait ' + s.remainingBlockSeconds + 's' : allLocked ? 'All locked' : needsLock ? 'Lock a die first' : needsReveal ? 'Reveal first' : 'Roll') + '</span>' +
+            (s.swipeToRoll && !maxed && !blocked && !allLocked && !needsLock && !needsReveal ? '<span style="font-size:10px;opacity:0.7;font-weight:400;line-height:1;">Swipe left/right</span>' : '') +
+          '</span>' +
+        '</button>' +
+      '</div>' +
     '</div>' +
   '</div>';
 }
@@ -1801,6 +1821,73 @@ function buildRollingHistoryModal() {
         '</div>' +
       '</div>' +
       '<div class="modal-body" style="padding:0;">' + body + '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+// Pip-counting helpers. `allPippedDice` decides whether to show the count UI;
+// `pipCountSummary` aggregates currently-visible pipped dice.
+function allPippedDice(diceConfigs) {
+  return diceConfigs.length > 0 && diceConfigs.every(function(cfg) {
+    return cfg.sideData.every(function(s) { return s.type === 'PIPPED'; });
+  });
+}
+
+function pipCountSummary() {
+  var s = rollingState;
+  var total = 0;
+  var hiddenCount = 0;
+  var byColor = {};
+  var byValue = {};
+  s.diceConfigs.forEach(function(cfg, i) {
+    var side = cfg.sideData[s.diceValues[i]];
+    var pip = (side && typeof side.value === 'number') ? side.value : 0;
+    if (s.isHidden || s.individualMysteryDice[i]) { hiddenCount++; return; }
+    total += pip;
+    var color = (side && side.color) || '#FFFFFF';
+    var c = byColor[color] || (byColor[color] = { count: 0, sum: 0 });
+    c.count++;
+    c.sum += pip;
+    byValue[pip] = (byValue[pip] || 0) + 1;
+  });
+  return { total: total, hiddenCount: hiddenCount, byColor: byColor, byValue: byValue };
+}
+
+function buildCountModal() {
+  if (!rollingState.showCountModal) return '';
+  var sum = pipCountSummary();
+  var colorChips = Object.keys(sum.byColor).map(function(c) {
+    var info = sum.byColor[c];
+    return '<span class="count-color-chip">' +
+      '<span class="count-color-dot" style="background:' + c + '"></span>' +
+      info.count + ' dice (sum ' + info.sum + ')' +
+    '</span>';
+  }).join('');
+  var valueKeys = Object.keys(sum.byValue).map(Number).sort(function(a,b){return a-b;});
+  var valueChips = valueKeys.map(function(v) {
+    var count = sum.byValue[v];
+    return '<span class="count-value-chip">' +
+      '<span class="count-pip-die">' + buildPipGrid(v, false, '#000000') + '</span>' +
+      count + ' dice (sum ' + (v * count) + ')' +
+    '</span>';
+  }).join('');
+  return '<div class="modal-overlay" id="count-modal-overlay">' +
+    '<div class="modal" style="max-width:340px;">' +
+      '<div class="modal-header-row">' +
+        '<h2 class="modal-title">Pip count</h2>' +
+        '<button class="icon-btn" id="close-count-modal-btn">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' +
+          '</svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="modal-body">' +
+        '<div class="count-total">Total: <b>' + sum.total + '</b>' +
+          (sum.hiddenCount ? ' <span class="count-hidden">(' + sum.hiddenCount + ' hidden)</span>' : '') +
+        '</div>' +
+        (colorChips ? '<h3 class="settings-section-title">Sum by color</h3><div class="count-color-chips">' + colorChips + '</div>' : '') +
+        (valueChips ? '<h3 class="settings-section-title">Count by value</h3><div class="count-value-chips">' + valueChips + '</div>' : '') +
+      '</div>' +
     '</div>' +
   '</div>';
 }
@@ -2085,6 +2172,18 @@ function attachRollingEvents() {
   });
   el('rolling-history-overlay') && el('rolling-history-overlay').addEventListener('click', function(e) {
     if (e.target === el('rolling-history-overlay')) { rollingState.showHistory = false; renderRollingScreen(); }
+  });
+
+  el('pip-count-summary') && el('pip-count-summary').addEventListener('click', function() {
+    rollingState.showCountModal = true;
+    renderRollingScreen();
+  });
+  el('close-count-modal-btn') && el('close-count-modal-btn').addEventListener('click', function() {
+    rollingState.showCountModal = false;
+    renderRollingScreen();
+  });
+  el('count-modal-overlay') && el('count-modal-overlay').addEventListener('click', function(e) {
+    if (e.target === el('count-modal-overlay')) { rollingState.showCountModal = false; renderRollingScreen(); }
   });
 
   // Shared leave function used by back-btn and popstate
@@ -2528,6 +2627,7 @@ var DEFAULT_CONFIGS = [
     blockReThrowSeconds: 0,
     autoMysteryAfterRolls: 0,
     maxRolls: 0,
+    countPips: true,
     diceConfigs: (function() {
       var B='#1E88E5', O='#FF6F00', Y='#FDD835', P='#E91E63', G='#808080', N='#43A047';
       return [
@@ -2643,6 +2743,7 @@ window.addEventListener('popstate', function(e) {
       rollingState.showHistory = false;
       rollingState.showRestartConfirm = false;
       rollingState.showBackConfirm = false;
+      rollingState.showCountModal = false;
       renderRollingScreen();
     }
     return;
@@ -2650,12 +2751,13 @@ window.addEventListener('popstate', function(e) {
   // state.screen === 'config' or unknown
   if (rollingState) {
     // Close rolling modals before leaving, if any were open
-    if (rollingState.showSettings || rollingState.showInfo || rollingState.showRestartConfirm || rollingState.showHistory || rollingState.showBackConfirm) {
+    if (rollingState.showSettings || rollingState.showInfo || rollingState.showRestartConfirm || rollingState.showHistory || rollingState.showBackConfirm || rollingState.showCountModal) {
       rollingState.showSettings = false;
       rollingState.showInfo = false;
       rollingState.showHistory = false;
       rollingState.showRestartConfirm = false;
       rollingState.showBackConfirm = false;
+      rollingState.showCountModal = false;
       history.pushState({ screen: 'rolling' }, '');
       renderRollingScreen();
       return;
