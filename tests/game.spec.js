@@ -243,21 +243,69 @@ test('right-clicking a die toggles individual mystery', async ({ page, baseURL }
   await expect(page.locator('.dice-face[data-index="0"] .mystery-icon')).toBeHidden();
 });
 
-test('auto-mystery triggers after N rolls on unlocked dice only', async ({ page, baseURL }) => {
-  await gotoRolling(page, baseURL, { autoMysteryAfterRolls: 1, diceConfigs: BASE_DICE });
-  // Roll 1 already happened on init; rolling again hits the threshold and triggers mystery
+test('auto-mystery triggers at listed roll on unlocked dice only', async ({ page, baseURL }) => {
+  await gotoRolling(page, baseURL, { autoMysteryAfterRolls: [2], diceConfigs: BASE_DICE });
+  // Roll 1 already happened on init (no mystery — 1 not in list). Click → roll 2 → trigger.
   await page.click('#roll-btn');
   await page.waitForTimeout(600);
   await expect(page.locator('.mystery-icon')).toBeVisible();
 });
 
 test('auto-mystery does not apply to locked dice', async ({ page, baseURL }) => {
-  await gotoRolling(page, baseURL, { numberOfDice: 2, autoMysteryAfterRolls: 1, diceConfigs: [BASE_DICE[0], BASE_DICE[0]] });
+  await gotoRolling(page, baseURL, { numberOfDice: 2, autoMysteryAfterRolls: [2], diceConfigs: [BASE_DICE[0], BASE_DICE[0]] });
   await page.locator('.dice-face[data-index="0"]').click();
   await page.click('#roll-btn');
   await page.waitForTimeout(600);
   await expect(page.locator('.dice-face[data-index="0"] .mystery-icon')).toBeHidden();
   await expect(page.locator('.dice-face[data-index="1"] .mystery-icon')).toBeVisible();
+});
+
+// ── Pip count summary ─────────────────────────────────────────────────────────
+
+test('pip count summary: hidden by default and shown when countPips is on', async ({ page, baseURL }) => {
+  await gotoRolling(page, baseURL, { diceConfigs: BASE_DICE });
+  await expect(page.locator('#pip-count-summary')).toBeHidden();
+  await gotoRolling(page, baseURL, { countPips: true, diceConfigs: BASE_DICE });
+  await expect(page.locator('#pip-count-summary')).toBeVisible();
+});
+
+test('pip count summary: not shown for non-pipped dice', async ({ page, baseURL }) => {
+  const numberDice = [{ sides: 2, sideData: [
+    { type: 'NUMBER', value: 1, color: '#FFFFFF', shape: 'SQUARE' },
+    { type: 'NUMBER', value: 2, color: '#FFFFFF', shape: 'SQUARE' },
+  ]}];
+  await gotoRolling(page, baseURL, { countPips: true, diceConfigs: numberDice });
+  await expect(page.locator('#pip-count-summary')).toBeHidden();
+});
+
+test('pip count modal: click opens, shows total + per-color/per-value, close via X', async ({ page, baseURL }) => {
+  const twoColors = [
+    { sides: 6, sideData: [1,2,3,4,5,6].map(n => ({ type: 'PIPPED', value: n, color: '#E53935', shape: 'SQUARE' })) },
+    { sides: 6, sideData: [1,2,3,4,5,6].map(n => ({ type: 'PIPPED', value: n, color: '#1E88E5', shape: 'SQUARE' })) },
+  ];
+  await gotoRolling(page, baseURL, { countPips: true, diceConfigs: twoColors });
+  // Force deterministic dice values to make assertions stable.
+  await page.evaluate(() => { rollingState.diceValues = [2, 4]; renderRollingScreen(); }); // pips 3 + 5 = 8
+  await expect(page.locator('#pip-count-summary')).toContainText('8');
+  await page.click('#pip-count-summary');
+  await expect(page.locator('#count-modal-overlay')).toBeVisible();
+  await expect(page.locator('.count-total')).toContainText('8');
+  // Two distinct colors -> two color chips; two distinct values -> two value chips.
+  await expect(page.locator('.count-color-chip')).toHaveCount(2);
+  await expect(page.locator('.count-value-chip')).toHaveCount(2);
+  // Each color chip carries "1 dice (sum 3|5)".
+  await expect(page.locator('.count-color-chip').first()).toContainText('1 dice');
+  // Value chip shows count and total per value (3*1 = 3, 5*1 = 5).
+  await expect(page.locator('.count-value-chip').first()).toContainText('1 dice (sum 3)');
+  await page.click('#close-count-modal-btn');
+  await expect(page.locator('#count-modal-overlay')).toBeHidden();
+});
+
+test('pip count modal: closes via overlay click', async ({ page, baseURL }) => {
+  await gotoRolling(page, baseURL, { countPips: true, diceConfigs: BASE_DICE });
+  await page.click('#pip-count-summary');
+  await page.click('#count-modal-overlay', { position: { x: 5, y: 5 } });
+  await expect(page.locator('#count-modal-overlay')).toBeHidden();
 });
 
 // ── Block timer ────────────────────────────────────────────────────────────────

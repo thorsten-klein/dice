@@ -177,12 +177,50 @@ html, body {
   width: 100%;
   max-width: 600px;
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 6px;
   padding: 14px 16px;
   padding-bottom: max(14px, env(safe-area-inset-bottom, 14px));
   background: linear-gradient(to top, var(--bg-end) 70%, transparent);
   z-index: 10;
 }
+.bottom-actions-row { display: flex; gap: 12px; }
+
+/* Pip-count summary above the Restart/Roll buttons */
+.pip-count-summary {
+  background: none; border: none; color: var(--text-w80);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  padding: 2px 8px; align-self: center; border-radius: 6px;
+}
+.pip-count-summary:hover { background: rgba(255,255,255,0.10); color: var(--text-white); }
+.pip-count-summary b { color: var(--text-white); font-size: 15px; margin-left: 4px; }
+
+/* Pip-count modal body rows */
+.count-total { font-size: 16px; margin: 8px 0 4px; }
+.count-total b { font-size: 22px; }
+.count-hidden { font-size: 12px; color: var(--text-w70); margin-left: 6px; }
+.count-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.count-color-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.20); }
+.count-label { flex: 1; color: var(--text-w90); font-size: 14px; }
+.count-val { font-weight: 700; }
+/* Compact per-color chips that wrap to fill the available width */
+.count-color-chips,
+.count-value-chips { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 4px; }
+.count-color-chip,
+.count-value-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--text-w90);
+  background: rgba(255,255,255,0.06); border-radius: 999px;
+  padding: 3px 9px;
+}
+/* Mini pip die used in the "Count by value" chips */
+.count-pip-die {
+  width: 24px; height: 24px;
+  background: #ffffff; border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.count-pip-die .pip-grid { width: 18px; height: 18px; }
 
 /* =============================================
    DIVIDER
@@ -325,6 +363,22 @@ html, body {
 .setting-num-inp::-webkit-inner-spin-button,
 .setting-num-inp::-webkit-outer-spin-button { display: none; }
 .setting-num-inp:focus { outline: none; border-color: var(--purple); }
+
+/* Rolls-list (Auto Mystery, Enforce Reveal): toggle-driven list of roll numbers */
+.rolls-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding-left: 4px; }
+.rolls-list-row { display: flex; align-items: center; gap: 8px; }
+.rolls-list-prefix { font-size: 13px; color: var(--text-w70); }
+.rolls-list-remove {
+  background: none; border: none; color: var(--text-w70); cursor: pointer;
+  font-size: 20px; line-height: 1; padding: 4px 8px; border-radius: 4px;
+}
+.rolls-list-remove:hover { color: var(--text-white); background: rgba(255,255,255,0.10); }
+.rolls-list-add {
+  background: rgba(255,255,255,0.08); border: 1px dashed rgba(255,255,255,0.25);
+  color: var(--text-w90); cursor: pointer; padding: 6px 12px; border-radius: 6px;
+  font-size: 13px; font-weight: 600; align-self: flex-start; margin-top: 2px;
+}
+.rolls-list-add:hover { background: rgba(255,255,255,0.15); }
 
 /* Size +/- controls inside modal */
 .size-controls {
@@ -1156,6 +1210,14 @@ html, body {
   line-height: 1;
 }
 .mystery-icon.individual { color: var(--blue); }
+/* Mystery dice get the same shape-wrap so they pick up the roll animation,
+   but rendered as a transparent square with a white frame. */
+.mystery-wrap {
+  background: transparent;
+  border: 2px solid var(--text-white);
+  border-radius: 12%;
+  box-sizing: border-box;
+}
 
 /* === Pip grid (PIPPED content type) === */
 .pip-grid {

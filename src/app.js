@@ -56,6 +56,8 @@ var SHAPES = [
   { id: 'STAR4',       label: 'Star (4)',     clip: 'polygon(50% 0%, 64.1% 35.9%, 100% 50%, 64.1% 64.1%, 50% 100%, 35.9% 64.1%, 0% 50%, 35.9% 35.9%)' },
   { id: 'STAR8',       label: 'Star (8)',     clip: 'polygon(50% 0%, 57.7% 31.5%, 85.4% 14.6%, 68.5% 42.4%, 100% 50%, 68.5% 57.7%, 85.4% 85.4%, 57.7% 68.5%, 50% 100%, 42.4% 68.5%, 14.6% 85.4%, 31.5% 57.7%, 0% 50%, 31.5% 42.4%, 14.6% 14.6%, 42.4% 31.5%)' },
   { id: 'CROSS',       label: 'Cross',        clip: 'polygon(35% 0%, 65% 0%, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0% 65%, 0% 35%, 35% 35%)' },
+  // CROSS_45: CROSS rotated 45° around (50,50). Each (x,y) → (50+(x-50-y+50)·√2/2, 50+(x-50+y-50)·√2/2).
+  { id: 'CROSS_45',    label: 'Cross (45°)',  clip: 'polygon(74.7% 4%, 96% 25.3%, 71.2% 50%, 96% 74.7%, 74.7% 96%, 50% 71.2%, 25.3% 96%, 4% 74.7%, 28.8% 50%, 4% 25.3%, 25.3% 4%, 50% 28.8%)' },
   // FLOWER4/5: 4/5 circles of r=20% at offset 30% from center, unioned via SVG clipPath.
   // clipPathUnits="objectBoundingBox" makes coordinates relative (0–1) so they scale automatically.
   { id: 'FLOWER4',     label: 'Flower (4)',   clip: 'url(#clip-flower4)' },
@@ -127,16 +129,24 @@ var DRAFT_KEY = 'dice_config_draft';
 var VIEW_SETTINGS_KEY = 'dice_view_settings';
 var GAME_SETTINGS_KEY = 'dice_game_settings';
 
+// Normalize a "list of roll numbers" setting. Accepts an array (filtered to
+// positive numbers) or anything else (= off → []).
+function normalizeRollsList(v) {
+  return Array.isArray(v) ? v.filter(function(n) { return typeof n === 'number' && n > 0; }) : [];
+}
+
 // Persists current (possibly unsaved) game settings for restore on page refresh
 function saveGameSettings(state) {
   localStorage.setItem(GAME_SETTINGS_KEY, JSON.stringify({
     _desc: configState ? configState.description : '',
     blockReThrowSeconds: state.blockReThrowSeconds || 0,
-    autoMysteryAfterRolls: state.autoMysteryAfterRolls || 0,
+    autoMysteryAfterRolls: normalizeRollsList(state.autoMysteryAfterRolls),
+    enforceRevealAfterRolls: normalizeRollsList(state.enforceRevealAfterRolls),
     maxRolls: state.maxRolls || 0,
     confirmRestartWhenMystery: state.confirmRestartWhenMystery !== false,
     allowUnlockAfterRoll: state.allowUnlockAfterRoll !== false,
     requireLockBeforeRoll: !!state.requireLockBeforeRoll,
+    countPips: !!state.countPips,
   }));
   saveDraft();
 }
@@ -308,11 +318,13 @@ function initConfigScreen(preload, isBootRestore) {
     numberOfDice: 1,
     diceConfigs: [createDefaultDiceConfig(6)],
     blockReThrowSeconds: 0,
-    autoMysteryAfterRolls: 0,
+    autoMysteryAfterRolls: [],
+    enforceRevealAfterRolls: [],
     maxRolls: 0,
     confirmRestartWhenMystery: true,
     allowUnlockAfterRoll: true,
     requireLockBeforeRoll: false,
+    countPips: false,
     showConfigurations: false,
     configsSortKey: 'name',
     configsSortAsc: true,
@@ -322,16 +334,20 @@ function initConfigScreen(preload, isBootRestore) {
     typePickerModal: null,
   };
   if (preload) Object.assign(configState, preload);
+  configState.autoMysteryAfterRolls = normalizeRollsList(configState.autoMysteryAfterRolls);
+  configState.enforceRevealAfterRolls = normalizeRollsList(configState.enforceRevealAfterRolls);
   // Restore session game settings on refresh/boot only — not when user loads from history
   if (isBootRestore || !preload) {
     var gs = loadGameSettings();
     if (gs && (!preload || gs._desc === configState.description)) {
       configState.blockReThrowSeconds = gs.blockReThrowSeconds || 0;
-      configState.autoMysteryAfterRolls = gs.autoMysteryAfterRolls || 0;
+      configState.autoMysteryAfterRolls = normalizeRollsList(gs.autoMysteryAfterRolls);
+      configState.enforceRevealAfterRolls = normalizeRollsList(gs.enforceRevealAfterRolls);
       configState.maxRolls = gs.maxRolls || 0;
       if (gs.confirmRestartWhenMystery !== undefined) configState.confirmRestartWhenMystery = gs.confirmRestartWhenMystery;
       if (gs.allowUnlockAfterRoll !== undefined) configState.allowUnlockAfterRoll = gs.allowUnlockAfterRoll;
       if (gs.requireLockBeforeRoll !== undefined) configState.requireLockBeforeRoll = gs.requireLockBeforeRoll;
+      if (gs.countPips !== undefined) configState.countPips = gs.countPips;
     }
   }
   history.replaceState({ screen: 'config' }, '');
@@ -351,10 +367,12 @@ function saveDraft() {
       diceConfigs: configState.diceConfigs,
       blockReThrowSeconds: configState.blockReThrowSeconds,
       autoMysteryAfterRolls: configState.autoMysteryAfterRolls,
+      enforceRevealAfterRolls: configState.enforceRevealAfterRolls,
       maxRolls: configState.maxRolls,
       confirmRestartWhenMystery: configState.confirmRestartWhenMystery,
       allowUnlockAfterRoll: configState.allowUnlockAfterRoll,
       requireLockBeforeRoll: configState.requireLockBeforeRoll,
+      countPips: !!configState.countPips,
     }));
   } catch (e) {} // configState null (rolling screen) or storage quota — safe to ignore
 }
@@ -371,7 +389,13 @@ function loadDraft() {
 
 function renderConfigScreen() {
   var root = document.getElementById('app');
+  // Preserve scroll position of the form across full re-renders (e.g. toggling
+  // a rolls-list shouldn't snap the page back to the top).
+  var prevScroll = root.querySelector('.form-scroll');
+  var savedTop = prevScroll ? prevScroll.scrollTop : 0;
   root.innerHTML = buildConfigScreenHtml();
+  var newScroll = root.querySelector('.form-scroll');
+  if (newScroll) newScroll.scrollTop = savedTop;
   attachConfigEvents();
   updateBodyScroll();
   saveDraft();
@@ -572,19 +596,48 @@ function buildGameSettingRow(pfx, id, label, value, hint, suffix, zeroLabel) {
   '</div>';
 }
 
+function buildGameSettingRollsList(pfx, id, label, values, hint) {
+  var enabled = values.length > 0;
+  var rows = enabled ? values.map(function(v, i) {
+    return '<div class="rolls-list-row">' +
+        '<span class="rolls-list-prefix">Roll</span>' +
+        '<button class="counter-btn" data-rolls-decr="' + pfx + id + '" data-idx="' + i + '">−</button>' +
+        '<input type="number" class="setting-num-inp" data-rolls-input="' + pfx + id + '" data-idx="' + i + '" value="' + v + '" min="1" inputmode="numeric">' +
+        '<button class="counter-btn" data-rolls-incr="' + pfx + id + '" data-idx="' + i + '">+</button>' +
+        '<button class="rolls-list-remove" data-rolls-remove="' + pfx + id + '" data-idx="' + i + '" title="Remove">×</button>' +
+      '</div>';
+  }).join('') + '<button class="rolls-list-add" data-rolls-add="' + pfx + id + '">+ Add roll</button>' : '';
+  return '<div class="setting-group">' +
+    '<div class="setting-label-row">' +
+      '<div class="setting-label-wrap">' +
+        '<label class="setting-label">' + label + '</label>' +
+        '<p class="setting-hint">' + hint + '</p>' +
+      '</div>' +
+      '<label class="toggle-switch">' +
+        '<input type="checkbox" data-rolls-toggle="' + pfx + id + '"' + (enabled ? ' checked' : '') + '>' +
+        '<span class="toggle-slider"></span>' +
+      '</label>' +
+    '</div>' +
+    (enabled ? '<div class="rolls-list" data-rolls-list="' + pfx + id + '">' + rows + '</div>' : '') +
+  '</div>';
+}
+
 function buildGameSettingsHtml(state, pfx) {
   var b = state.blockReThrowSeconds || 0;
-  var m = state.autoMysteryAfterRolls || 0;
+  var mList = normalizeRollsList(state.autoMysteryAfterRolls);
+  var erList = normalizeRollsList(state.enforceRevealAfterRolls);
   var mx = state.maxRolls || 0;
   var cr = state.confirmRestartWhenMystery !== false;
   var ul = state.allowUnlockAfterRoll !== false;
   var rl = !!state.requireLockBeforeRoll;
   return buildGameSettingRow(pfx, 'block-val',     'Block re-roll for some time', b,  'Block rolling for N seconds after each roll (0 = Off)', 's') +
-         buildGameSettingRow(pfx, 'mystery-val',   'Auto Mystery after rolls', m,  'Automatically enable mystery mode after N rolls (0 = Off)', true) +
+         buildGameSettingRollsList(pfx, 'mystery-list',  'Auto Mystery after rolls',     mList,  'Automatically enable mystery mode after these roll numbers') +
+         buildGameSettingRollsList(pfx, 'enforce-list',  'Enforce reveal after roll',    erList, 'Disable the roll button after these roll numbers until the dice are revealed') +
          buildGameSettingRow(pfx, 'limit-rolls-val', 'Limit number of rolls', mx, 'Specify a maximum number of rolls per round (0 = Off)', null, 'Off') +
          buildGameSettingToggle(pfx, 'confirm-restart', 'Confirm restart in case of unrevealed dice', cr, 'Ask before restarting when mystery dice are active') +
          buildGameSettingToggle(pfx, 'allow-unlock', 'Allow unlocking dice after re-roll', ul, 'Locked dice can be unlocked again in next roll') +
-         buildGameSettingToggle(pfx, 'require-lock', 'Require lock before re-roll', rl, 'At least one die must be newly locked before rolling again');
+         buildGameSettingToggle(pfx, 'require-lock', 'Require lock before re-roll', rl, 'At least one die must be newly locked before rolling again') +
+         buildGameSettingToggle(pfx, 'count-pips', 'Count', !!state.countPips, 'Show pip sum above the Restart/Roll buttons (only for pipped dice)');
 }
 
 function attachGameSettingsEvents(state, pfx, rerender) {
@@ -612,8 +665,86 @@ function attachGameSettingsEvents(state, pfx, rerender) {
   }
 
   wireInput('block-val',       10, function(val) { state.blockReThrowSeconds = val; saveGameSettings(state); });
-  wireInput('mystery-val',     20, function(val) { state.autoMysteryAfterRolls = val; saveGameSettings(state); });
   wireInput('limit-rolls-val', 50, function(val) { state.maxRolls = val; saveGameSettings(state); if (rerender) rerender(); });
+
+  // Rolls-list controls (Auto Mystery, Enforce Reveal). Each list is keyed by its
+  // toggle id (pfx + id); we look up which state field via fieldFor() below.
+  function fieldFor(key) {
+    return key === pfx + 'mystery-list' ? 'autoMysteryAfterRolls' : 'enforceRevealAfterRolls';
+  }
+  function applyRollsList(key, newList) {
+    state[fieldFor(key)] = newList;
+    saveGameSettings(state);
+    if (rerender) rerender();
+  }
+  // Find the next roll value in `dir` direction (+1/-1) from `start` that isn't already
+  // taken by another row (rows other than `excludeIdx`). Never returns less than 1.
+  // Returns null if scanning down and the nearest free slot is < 1 (i.e. no room).
+  function nextFreeRoll(list, excludeIdx, start, dir) {
+    var taken = {};
+    list.forEach(function(v, i) { if (i !== excludeIdx) taken[v] = true; });
+    var v = start;
+    while (taken[v]) v += dir;
+    return v >= 1 ? v : null;
+  }
+  qsa('[data-rolls-toggle]').forEach(function(chk) {
+    chk.addEventListener('change', function() {
+      applyRollsList(chk.dataset.rollsToggle, chk.checked ? [1] : []);
+    });
+  });
+  qsa('[data-rolls-input]').forEach(function(inp) {
+    inp.addEventListener('change', function() {
+      var key = inp.dataset.rollsInput;
+      var idx = parseInt(inp.dataset.idx);
+      var list = state[fieldFor(key)].slice();
+      var typed = Math.max(1, parseInt(inp.value) || 1);
+      // If typed value collides with another row, skip forward to the next free slot.
+      var v = nextFreeRoll(list, idx, typed, +1);
+      if (v === null) return;
+      list[idx] = v;
+      applyRollsList(key, list);
+    });
+  });
+  qsa('[data-rolls-decr]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var key = btn.dataset.rollsDecr;
+      var idx = parseInt(btn.dataset.idx);
+      var list = state[fieldFor(key)].slice();
+      var v = nextFreeRoll(list, idx, list[idx] - 1, -1);
+      if (v === null) return; // no room below — leave value as-is
+      list[idx] = v;
+      applyRollsList(key, list);
+    });
+  });
+  qsa('[data-rolls-incr]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var key = btn.dataset.rollsIncr;
+      var idx = parseInt(btn.dataset.idx);
+      var list = state[fieldFor(key)].slice();
+      list[idx] = nextFreeRoll(list, idx, list[idx] + 1, +1);
+      applyRollsList(key, list);
+    });
+  });
+  qsa('[data-rolls-remove]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var key = btn.dataset.rollsRemove;
+      var idx = parseInt(btn.dataset.idx);
+      var list = state[fieldFor(key)].slice();
+      list.splice(idx, 1);
+      applyRollsList(key, list);
+    });
+  });
+  qsa('[data-rolls-add]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var key = btn.dataset.rollsAdd;
+      var list = state[fieldFor(key)].slice();
+      // Smallest unused positive integer.
+      var next = 1;
+      while (list.indexOf(next) !== -1) next++;
+      list.push(next);
+      applyRollsList(key, list);
+    });
+  });
 
   function wireToggle(toggleId, onChange) {
     var chk = el(pfx + toggleId);
@@ -623,6 +754,7 @@ function attachGameSettingsEvents(state, pfx, rerender) {
   wireToggle('confirm-restart', function(val) { state.confirmRestartWhenMystery = val; saveGameSettings(state); });
   wireToggle('allow-unlock',    function(val) { state.allowUnlockAfterRoll = val; saveGameSettings(state); });
   wireToggle('require-lock',    function(val) { state.requireLockBeforeRoll = val; saveGameSettings(state); if (rerender) rerender(); });
+  wireToggle('count-pips',      function(val) { state.countPips = val; saveGameSettings(state); if (rerender) rerender(); });
 
   var decrSel = pfx ? '[data-setting-decr^="' + pfx + '"]' : '[data-setting-decr]';
   var incrSel = pfx ? '[data-setting-incr^="' + pfx + '"]' : '[data-setting-incr]';
@@ -747,19 +879,21 @@ function buildConfigFormHtml() {
       '</div>' +
     '</div>' +
     '<div class="bottom-actions">' +
-      '<button class="btn btn-primary" id="save-btn">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-          '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>' +
-          '<polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>' +
-        '</svg>' +
-        'Save configuration' +
-      '</button>' +
-      '<button class="btn btn-green" id="start-btn">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-          '<polygon points="5 3 19 12 5 21 5 3"/>' +
-        '</svg>' +
-        'Start Game' +
-      '</button>' +
+      '<div class="bottom-actions-row">' +
+        '<button class="btn btn-primary" id="save-btn">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>' +
+            '<polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>' +
+          '</svg>' +
+          'Save configuration' +
+        '</button>' +
+        '<button class="btn btn-green" id="start-btn">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<polygon points="5 3 19 12 5 21 5 3"/>' +
+          '</svg>' +
+          'Start Game' +
+        '</button>' +
+      '</div>' +
     '</div>' +
   '</div>';
 }
@@ -996,11 +1130,13 @@ function attachConfigEvents() {
           numberOfDice: cfg.numberOfDice,
           diceConfigs: cfg.diceConfigs,
           blockReThrowSeconds: cfg.blockReThrowSeconds || 0,
-          autoMysteryAfterRolls: cfg.autoMysteryAfterRolls || 0,
+          autoMysteryAfterRolls: normalizeRollsList(cfg.autoMysteryAfterRolls),
+          enforceRevealAfterRolls: normalizeRollsList(cfg.enforceRevealAfterRolls),
           maxRolls: cfg.maxRolls || 0,
           confirmRestartWhenMystery: cfg.confirmRestartWhenMystery !== false,
           allowUnlockAfterRoll: cfg.allowUnlockAfterRoll !== false,
           requireLockBeforeRoll: !!cfg.requireLockBeforeRoll,
+          countPips: !!cfg.countPips,
           showConfigurations: false,
         };
         Object.assign(configState, loaded);
@@ -1038,10 +1174,12 @@ function attachConfigEvents() {
       diceConfigs: configState.diceConfigs,
       blockReThrowSeconds: configState.blockReThrowSeconds,
       autoMysteryAfterRolls: configState.autoMysteryAfterRolls,
+      enforceRevealAfterRolls: configState.enforceRevealAfterRolls,
       maxRolls: configState.maxRolls || 0,
       confirmRestartWhenMystery: configState.confirmRestartWhenMystery !== false,
       allowUnlockAfterRoll: configState.allowUnlockAfterRoll !== false,
       requireLockBeforeRoll: !!configState.requireLockBeforeRoll,
+      countPips: !!configState.countPips,
     });
     localStorage.setItem(LAST_CONFIG_KEY, desc);
     showToast("Configuration '" + desc + "' saved");
@@ -1052,13 +1190,15 @@ function attachConfigEvents() {
       diceConfigs: configState.diceConfigs,
       blockReThrowSeconds: configState.blockReThrowSeconds,
       autoMysteryAfterRolls: configState.autoMysteryAfterRolls,
+      enforceRevealAfterRolls: configState.enforceRevealAfterRolls,
       maxRolls: configState.maxRolls || 0,
       confirmRestartWhenMystery: configState.confirmRestartWhenMystery !== false,
       allowUnlockAfterRoll: configState.allowUnlockAfterRoll !== false,
       requireLockBeforeRoll: !!configState.requireLockBeforeRoll,
+      countPips: !!configState.countPips,
     });
   });
-  attachGameSettingsEvents(configState, '', null);
+  attachGameSettingsEvents(configState, '', renderConfigScreen);
 
   // Dice preview strip — open modal
   qsa('[data-preview-open]').forEach(function(chip) {
@@ -1325,16 +1465,20 @@ function leaveRollingScreen() {
 
 function syncGameSettingsFromRolling() {
   configState.blockReThrowSeconds = rollingState.blockReThrowSeconds;
-  configState.autoMysteryAfterRolls = rollingState.autoMysteryAfterRolls;
+  configState.autoMysteryAfterRolls = normalizeRollsList(rollingState.autoMysteryAfterRolls);
+  configState.enforceRevealAfterRolls = normalizeRollsList(rollingState.enforceRevealAfterRolls);
   configState.maxRolls = rollingState.maxRolls;
   configState.confirmRestartWhenMystery = rollingState.confirmRestartWhenMystery !== false;
   configState.allowUnlockAfterRoll = rollingState.allowUnlockAfterRoll !== false;
   configState.requireLockBeforeRoll = !!rollingState.requireLockBeforeRoll;
+  configState.countPips = !!rollingState.countPips;
   saveGameSettings(configState);
 }
 
 function initRollingScreen(params) {
   var diceConfigs = params.diceConfigs;
+  var mysteryList = normalizeRollsList(params.autoMysteryAfterRolls);
+  var enforceList = normalizeRollsList(params.enforceRevealAfterRolls);
   rollingState = {
     description: params.description || '',
     diceConfigs: diceConfigs,
@@ -1343,13 +1487,17 @@ function initRollingScreen(params) {
     permanentlyLocked: diceConfigs.map(function() { return false; }),
     lockedBeforeLastRoll: diceConfigs.map(function() { return false; }),
     isHidden: false,
-    individualMysteryDice: diceConfigs.map(function() { return false; }),
+    individualMysteryDice: diceConfigs.map(function(_, i) { return mysteryList.indexOf(1) !== -1; }),
     blockReThrowSeconds: params.blockReThrowSeconds || 0,
-    autoMysteryAfterRolls: params.autoMysteryAfterRolls || 0,
+    autoMysteryAfterRolls: mysteryList,
+    enforceRevealAfterRolls: enforceList,
     maxRolls: params.maxRolls || 0,
     confirmRestartWhenMystery: params.confirmRestartWhenMystery !== false,
     allowUnlockAfterRoll: params.allowUnlockAfterRoll !== false,
     requireLockBeforeRoll: !!params.requireLockBeforeRoll,
+    countPips: !!params.countPips,
+    showCountModal: false,
+    revealRequired: enforceList.indexOf(1) !== -1,
     rollCount: 1,
     roundNumber: 1,
     diceSize: (loadViewSettings().diceSize) || 1.0,
@@ -1448,12 +1596,14 @@ function buildRollingScreenHtml() {
   var maxed = s.maxRolls > 0 && s.rollCount >= s.maxRolls;
   var allLocked = s.lockedDice.length > 0 && s.lockedDice.every(function(v) { return v; });
   var needsLock = s.requireLockBeforeRoll && !s.lockedDice.some(function(v,i){return v && !s.lockedBeforeLastRoll[i];});
+  var needsReveal = !!s.revealRequired;
   return '<div class="screen rolling-screen">' +
     buildRollingSettingsDialog() +
     buildRestartConfirmModal() +
     buildRollingInfoModal(s) +
     buildRollingHistoryModal() +
     buildBackConfirmModal() +
+    buildCountModal() +
     '<div class="header">' +
       '<button class="icon-btn" id="back-btn">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>' +
@@ -1501,21 +1651,26 @@ function buildRollingScreenHtml() {
     '</div>' +
 
     '<div class="bottom-actions">' +
-      '<button class="btn btn-orange" id="reset-btn">' +
-        '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' +
-          '<path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"/>' +
-        '</svg>' +
-        'Restart' +
-      '</button>' +
-      '<button class="btn btn-green' + (blocked || maxed || allLocked || needsLock ? ' disabled' : '') + '" id="roll-btn"' + (blocked || maxed || allLocked || needsLock ? ' disabled' : '') + '>' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-          '<path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>' +
-        '</svg>' +
-        '<span style="display:flex;flex-direction:column;align-items:flex-start;gap:0;">' +
-          '<span>' + (maxed ? 'Max reached' : blocked ? 'Wait ' + s.remainingBlockSeconds + 's' : allLocked ? 'All locked' : needsLock ? 'Lock a die first' : 'Roll') + '</span>' +
-          (s.swipeToRoll && !maxed && !blocked && !allLocked && !needsLock ? '<span style="font-size:10px;opacity:0.7;font-weight:400;line-height:1;">Swipe left/right</span>' : '') +
-        '</span>' +
-      '</button>' +
+      (s.countPips && allPippedDice(s.diceConfigs)
+        ? '<button class="pip-count-summary" id="pip-count-summary" type="button">Sum: <b>' + pipCountSummary().total + '</b></button>'
+        : '') +
+      '<div class="bottom-actions-row">' +
+        '<button class="btn btn-orange" id="reset-btn">' +
+          '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' +
+            '<path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"/>' +
+          '</svg>' +
+          'Restart' +
+        '</button>' +
+        '<button class="btn btn-green' + (blocked || maxed || allLocked || needsLock || needsReveal ? ' disabled' : '') + '" id="roll-btn"' + (blocked || maxed || allLocked || needsLock || needsReveal ? ' disabled' : '') + '>' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>' +
+          '</svg>' +
+          '<span style="display:flex;flex-direction:column;align-items:flex-start;gap:0;">' +
+            '<span>' + (maxed ? 'Max reached' : blocked ? 'Wait ' + s.remainingBlockSeconds + 's' : allLocked ? 'All locked' : needsLock ? 'Lock a die first' : needsReveal ? 'Reveal first' : 'Roll') + '</span>' +
+            (s.swipeToRoll && !maxed && !blocked && !allLocked && !needsLock && !needsReveal ? '<span style="font-size:10px;opacity:0.7;font-weight:400;line-height:1;">Swipe left/right</span>' : '') +
+          '</span>' +
+        '</button>' +
+      '</div>' +
     '</div>' +
   '</div>';
 }
@@ -1553,7 +1708,9 @@ function buildDiceItem(index, cfg, value, isLocked, isHidden, isIndividualMyster
     '<div class="dice-label">Dice ' + (index + 1) + '</div>' +
     '<div class="dice-content">' +
       (showMystery
-        ? '<div class="mystery-icon' + (isIndividualMystery ? ' individual' : '') + '">?</div>'
+        ? '<div class="dice-shape-wrap mystery-wrap">' +
+            '<div class="mystery-icon' + (isIndividualMystery ? ' individual' : '') + '">?</div>' +
+          '</div>'
         : '<div class="dice-shape-wrap" style="' + shapeStyle + '">' +
             buildDiceFace(cfg, value, isLocked, fgColor) +
           '</div>') +
@@ -1666,6 +1823,73 @@ function buildRollingHistoryModal() {
         '</div>' +
       '</div>' +
       '<div class="modal-body" style="padding:0;">' + body + '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+// Pip-counting helpers. `allPippedDice` decides whether to show the count UI;
+// `pipCountSummary` aggregates currently-visible pipped dice.
+function allPippedDice(diceConfigs) {
+  return diceConfigs.length > 0 && diceConfigs.every(function(cfg) {
+    return cfg.sideData.every(function(s) { return s.type === 'PIPPED'; });
+  });
+}
+
+function pipCountSummary() {
+  var s = rollingState;
+  var total = 0;
+  var hiddenCount = 0;
+  var byColor = {};
+  var byValue = {};
+  s.diceConfigs.forEach(function(cfg, i) {
+    var side = cfg.sideData[s.diceValues[i]];
+    var pip = (side && typeof side.value === 'number') ? side.value : 0;
+    if (s.isHidden || s.individualMysteryDice[i]) { hiddenCount++; return; }
+    total += pip;
+    var color = (side && side.color) || '#FFFFFF';
+    var c = byColor[color] || (byColor[color] = { count: 0, sum: 0 });
+    c.count++;
+    c.sum += pip;
+    byValue[pip] = (byValue[pip] || 0) + 1;
+  });
+  return { total: total, hiddenCount: hiddenCount, byColor: byColor, byValue: byValue };
+}
+
+function buildCountModal() {
+  if (!rollingState.showCountModal) return '';
+  var sum = pipCountSummary();
+  var colorChips = Object.keys(sum.byColor).map(function(c) {
+    var info = sum.byColor[c];
+    return '<span class="count-color-chip">' +
+      '<span class="count-color-dot" style="background:' + c + '"></span>' +
+      info.count + ' dice (sum ' + info.sum + ')' +
+    '</span>';
+  }).join('');
+  var valueKeys = Object.keys(sum.byValue).map(Number).sort(function(a,b){return a-b;});
+  var valueChips = valueKeys.map(function(v) {
+    var count = sum.byValue[v];
+    return '<span class="count-value-chip">' +
+      '<span class="count-pip-die">' + buildPipGrid(v, false, '#000000') + '</span>' +
+      count + ' dice (sum ' + (v * count) + ')' +
+    '</span>';
+  }).join('');
+  return '<div class="modal-overlay" id="count-modal-overlay">' +
+    '<div class="modal" style="max-width:340px;">' +
+      '<div class="modal-header-row">' +
+        '<h2 class="modal-title">Pip count</h2>' +
+        '<button class="icon-btn" id="close-count-modal-btn">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' +
+          '</svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="modal-body">' +
+        '<div class="count-total">Total: <b>' + sum.total + '</b>' +
+          (sum.hiddenCount ? ' <span class="count-hidden">(' + sum.hiddenCount + ' hidden)</span>' : '') +
+        '</div>' +
+        (colorChips ? '<h3 class="settings-section-title">Sum by color</h3><div class="count-color-chips">' + colorChips + '</div>' : '') +
+        (valueChips ? '<h3 class="settings-section-title">Count by value</h3><div class="count-value-chips">' + valueChips + '</div>' : '') +
+      '</div>' +
     '</div>' +
   '</div>';
 }
@@ -1952,6 +2176,18 @@ function attachRollingEvents() {
     if (e.target === el('rolling-history-overlay')) { rollingState.showHistory = false; renderRollingScreen(); }
   });
 
+  el('pip-count-summary') && el('pip-count-summary').addEventListener('click', function() {
+    rollingState.showCountModal = true;
+    renderRollingScreen();
+  });
+  el('close-count-modal-btn') && el('close-count-modal-btn').addEventListener('click', function() {
+    rollingState.showCountModal = false;
+    renderRollingScreen();
+  });
+  el('count-modal-overlay') && el('count-modal-overlay').addEventListener('click', function(e) {
+    if (e.target === el('count-modal-overlay')) { rollingState.showCountModal = false; renderRollingScreen(); }
+  });
+
   // Shared leave function used by back-btn and popstate
   function doLeaveRolling() { leaveRollingScreen(); }
   el('mystery-btn') && el('mystery-btn').addEventListener('click', function() {
@@ -1965,6 +2201,8 @@ function attachRollingEvents() {
       return s.lockedDice[i] ? v : anyUnlockedVisible;
     });
     s.isHidden = false;
+    // Revealing (turning mystery off) satisfies an enforce-reveal block.
+    if (!anyUnlockedVisible) s.revealRequired = false;
     renderRollingScreen();
   });
   el('reset-btn') && el('reset-btn').addEventListener('click', function() {
@@ -2107,6 +2345,7 @@ function doRestart() {
   rollingState.lockedDice = rollingState.diceConfigs.map(function() { return false; });
   rollingState.isHidden = false;
   rollingState.individualMysteryDice = rollingState.diceConfigs.map(function() { return false; });
+  rollingState.revealRequired = false;
   rollingState.rollCount = 0;
   rollingState.roundNumber += 1;
   rollingState.remainingBlockSeconds = 0;
@@ -2129,8 +2368,10 @@ function rollDice() {
     });
   }
   var newCount = rollingState.rollCount + 1;
-  var shouldMystery = rollingState.autoMysteryAfterRolls > 0
-    && newCount > rollingState.autoMysteryAfterRolls;
+  var mysteryList = normalizeRollsList(rollingState.autoMysteryAfterRolls);
+  var enforceList = normalizeRollsList(rollingState.enforceRevealAfterRolls);
+  var shouldMystery = mysteryList.indexOf(newCount) !== -1;
+  var shouldEnforceReveal = enforceList.indexOf(newCount) !== -1;
 
   // Animate + flash random sides
   var unlockedEls = document.querySelectorAll('.dice-face:not(.locked)');
@@ -2141,18 +2382,19 @@ function rollDice() {
       var index = parseInt(el.dataset.index);
       var cfg = rollingState.diceConfigs[index];
       if (!cfg || !cfg.sideData) return;
+      var wrap = el.querySelector('.dice-shape-wrap');
+      // Mystery dice still rotate (the wrap is animated) but must NOT flash
+      // random faces — that would leak which die is being rolled.
+      if (!wrap || wrap.classList.contains('mystery-wrap')) return;
       var randomSide = Math.floor(Math.random() * cfg.sideData.length);
       var side = cfg.sideData[randomSide];
       var bgColor = (side && side.color) || '#FFFFFF';
       var fgColor = contrastColor(bgColor);
-      var wrap = el.querySelector('.dice-shape-wrap');
       var clip = getShapeClip((side && side.shape) || 'DEFAULT');
-      if (wrap) {
-        wrap.style.background = bgColor;
-        wrap.style.clipPath = clip || '';
-        wrap.style.borderRadius = clip ? '0' : '12%';
-        wrap.innerHTML = buildDiceFace(cfg, randomSide, false, fgColor);
-      }
+      wrap.style.background = bgColor;
+      wrap.style.clipPath = clip || '';
+      wrap.style.borderRadius = clip ? '0' : '12%';
+      wrap.innerHTML = buildDiceFace(cfg, randomSide, false, fgColor);
     });
   }, 50);
 
@@ -2165,6 +2407,7 @@ function rollDice() {
     });
     rollingState.isHidden = false;
   }
+  if (shouldEnforceReveal) rollingState.revealRequired = true;
 
   if (rollingState.blockReThrowSeconds > 0) {
     rollingState.remainingBlockSeconds = rollingState.blockReThrowSeconds;
@@ -2198,13 +2441,14 @@ function rollDice() {
     if (rollBtn) {
       var allLocked2 = s.lockedDice.length > 0 && s.lockedDice.every(function(v) { return v; });
       var needsLock2 = s.requireLockBeforeRoll && !s.lockedDice.some(function(v,i){return v && !s.lockedBeforeLastRoll[i];});
-      var isDisabled = maxed || blocked || allLocked2 || needsLock2;
+      var needsReveal2 = !!s.revealRequired;
+      var isDisabled = maxed || blocked || allLocked2 || needsLock2 || needsReveal2;
       rollBtn.disabled = isDisabled;
       rollBtn.classList.toggle('disabled', isDisabled);
       var outerSpan = rollBtn.querySelector('span');
       var innerSpan = outerSpan && outerSpan.querySelector('span');
       if (innerSpan) {
-        innerSpan.textContent = maxed ? 'Max reached' : blocked ? 'Wait ' + s.remainingBlockSeconds + 's' : allLocked2 ? 'All locked' : needsLock2 ? 'Lock a die first' : 'Roll';
+        innerSpan.textContent = maxed ? 'Max reached' : blocked ? 'Wait ' + s.remainingBlockSeconds + 's' : allLocked2 ? 'All locked' : needsLock2 ? 'Lock a die first' : needsReveal2 ? 'Reveal first' : 'Roll';
       }
     }
     var tc = document.querySelector('.roll-count');
@@ -2260,13 +2504,14 @@ function attachDiceEvents() {
       if (rollBtn) {
         var allLocked = rollingState.lockedDice.every(function(v) { return v; });
         var needsLk = rollingState.requireLockBeforeRoll && !rollingState.lockedDice.some(function(v,i){return v && !rollingState.lockedBeforeLastRoll[i];});
-        var isDisabled = allLocked || needsLk || rollingState.remainingBlockSeconds > 0 || (rollingState.maxRolls > 0 && rollingState.rollCount >= rollingState.maxRolls);
+        var needsRv = !!rollingState.revealRequired;
+        var isDisabled = allLocked || needsLk || needsRv || rollingState.remainingBlockSeconds > 0 || (rollingState.maxRolls > 0 && rollingState.rollCount >= rollingState.maxRolls);
         rollBtn.disabled = isDisabled;
         rollBtn.classList.toggle('disabled', isDisabled);
         var outerSpan = rollBtn.querySelector('span');
         var innerSpan = outerSpan && outerSpan.querySelector('span');
         if (innerSpan && !rollingState.remainingBlockSeconds && !(rollingState.maxRolls > 0 && rollingState.rollCount >= rollingState.maxRolls)) {
-          innerSpan.textContent = allLocked ? 'All locked' : needsLk ? 'Lock a die first' : 'Roll';
+          innerSpan.textContent = allLocked ? 'All locked' : needsLk ? 'Lock a die first' : needsRv ? 'Reveal first' : 'Roll';
         }
       }
     });
@@ -2287,13 +2532,17 @@ function cn(number, color) { return { number: number, color: color }; }
 function ps(n, color) { return { type: 'PIPPED', value: n, color: color || '#FFFFFF' }; }
 function ns(n) { return { type: 'NUMBER', value: n, color: '#FFFFFF', shape: 'TRIANGLE' }; }
 function pip6(color) { return [ps(1,color),ps(2,color),ps(3,color),ps(4,color),ps(5,color),ps(6,color)]; }
+function wild(color) { return { type: 'TEXT', value: '?', color: color }; }
+function pip5q(color) { return [ps(1,color),ps(2,color),ps(3,color),ps(4,color),ps(5,color),wild(color)]; }
+function cross45(color) { return { type: 'TEXT', value: '', color: color, shape: 'CROSS_45' }; }
 
 var DEFAULT_CONFIGS = [
   {
     description: 'Chicago / Schock',
     numberOfDice: 3,
     blockReThrowSeconds: 0,
-    autoMysteryAfterRolls: 2,
+    autoMysteryAfterRolls: [1, 3],
+    enforceRevealAfterRolls: [1],
     maxRolls: 3,
     diceConfigs: [
       { sides: 6, sideData: pip6() },
@@ -2362,14 +2611,18 @@ var DEFAULT_CONFIGS = [
     blockReThrowSeconds: 0,
     autoMysteryAfterRolls: 0,
     maxRolls: 1,
-    diceConfigs: [
-      { sides: 6, sideData: [ps(1,'#000000'),ps(2,'#1E88E5'),ps(3,'#FF6F00'),ps(4,'#E53935'),ps(5,'#43A047'),ps(6,'#FDD835')] },
-      { sides: 6, sideData: [ps(1,'#000000'),ps(2,'#1E88E5'),ps(3,'#FF6F00'),ps(4,'#E53935'),ps(5,'#43A047'),ps(6,'#FDD835')] },
-      { sides: 6, sideData: [ps(1,'#000000'),ps(2,'#1E88E5'),ps(3,'#FF6F00'),ps(4,'#E53935'),ps(5,'#43A047'),ps(6,'#FDD835')] },
-      { sides: 6, sideData: pip6() },
-      { sides: 6, sideData: pip6() },
-      { sides: 6, sideData: pip6() }
-    ]
+    diceConfigs: (function() {
+      var colorCross = [cross45('#FDD835'), cross45('#1E88E5'), cross45('#43A047'), cross45('#FF6F00'), cross45('#E53935'), cross45('#000000')];
+      var blackPipQ = pip5q('#000000');
+      return [
+        { sides: 6, sideData: colorCross },
+        { sides: 6, sideData: colorCross },
+        { sides: 6, sideData: colorCross },
+        { sides: 6, sideData: blackPipQ },
+        { sides: 6, sideData: blackPipQ },
+        { sides: 6, sideData: blackPipQ }
+      ];
+    })()
   },
   {
     description: 'Kribbeln',
@@ -2377,6 +2630,7 @@ var DEFAULT_CONFIGS = [
     blockReThrowSeconds: 0,
     autoMysteryAfterRolls: 0,
     maxRolls: 0,
+    countPips: true,
     diceConfigs: (function() {
       var B='#1E88E5', O='#FF6F00', Y='#FDD835', P='#E91E63', G='#808080', N='#43A047';
       return [
@@ -2492,6 +2746,7 @@ window.addEventListener('popstate', function(e) {
       rollingState.showHistory = false;
       rollingState.showRestartConfirm = false;
       rollingState.showBackConfirm = false;
+      rollingState.showCountModal = false;
       renderRollingScreen();
     }
     return;
@@ -2499,12 +2754,13 @@ window.addEventListener('popstate', function(e) {
   // state.screen === 'config' or unknown
   if (rollingState) {
     // Close rolling modals before leaving, if any were open
-    if (rollingState.showSettings || rollingState.showInfo || rollingState.showRestartConfirm || rollingState.showHistory || rollingState.showBackConfirm) {
+    if (rollingState.showSettings || rollingState.showInfo || rollingState.showRestartConfirm || rollingState.showHistory || rollingState.showBackConfirm || rollingState.showCountModal) {
       rollingState.showSettings = false;
       rollingState.showInfo = false;
       rollingState.showHistory = false;
       rollingState.showRestartConfirm = false;
       rollingState.showBackConfirm = false;
+      rollingState.showCountModal = false;
       history.pushState({ screen: 'rolling' }, '');
       renderRollingScreen();
       return;
@@ -2579,7 +2835,8 @@ seedDefaultConfigurations();
         numberOfDice: cfg.numberOfDice,
         diceConfigs: cfg.diceConfigs,
         blockReThrowSeconds: cfg.blockReThrowSeconds || 0,
-        autoMysteryAfterRolls: cfg.autoMysteryAfterRolls || 0,
+        autoMysteryAfterRolls: normalizeRollsList(cfg.autoMysteryAfterRolls),
+        enforceRevealAfterRolls: normalizeRollsList(cfg.enforceRevealAfterRolls),
         maxRolls: cfg.maxRolls || 0,
       }, true);
       return;
